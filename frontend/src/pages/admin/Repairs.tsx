@@ -20,16 +20,17 @@ type Technician = {
   email: string
 }
 
-// Map admin status -> pill classes (matching customer palette)
+// Themed dark status pills (consistent with technician/details pages)
+// Uses subtle bg + border with accent text colors
 const statusPill = (s: string) => {
   switch (s) {
-    case 'completed': return 'bg-emerald-200 text-emerald-800'
-    case 'delivered': return 'bg-teal-200 text-teal-800'
-    case 'pending': return 'bg-amber-200 text-amber-800'
-    case 'in_progress': return 'bg-blue-200 text-blue-800'
-    case 'awaiting_parts': return 'bg-yellow-200 text-yellow-800'
-    case 'cancelled': return 'bg-rose-200 text-rose-800'
-    default: return 'bg-slate-200 text-slate-700'
+    case 'pending': return 'text-amber-300 bg-amber-400/10 border border-amber-400/20'
+    case 'in_progress': return 'text-[#A48AFB] bg-[#A48AFB]/10 border border-[#A48AFB]/20'
+    case 'awaiting_parts': return 'text-[#A48AFB] bg-[#A48AFB]/10 border border-[#A48AFB]/20'
+    case 'completed': return 'text-emerald-300 bg-emerald-400/10 border border-emerald-400/20'
+    case 'delivered': return 'text-slate-300 bg-white/5 border border-white/10'
+    case 'cancelled': return 'text-rose-300 bg-rose-400/10 border border-rose-400/20'
+    default: return 'text-slate-300 bg-white/5 border border-white/10'
   }
 }
 
@@ -143,27 +144,27 @@ const Repairs: React.FC = () => {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 text-white">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold tracking-tight text-slate-800">Repairs</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-white">Repairs</h1>
       </div>
-      {error && <div className="text-red-600 text-sm">{error}</div>}
-      {success && <div className="text-green-700 text-sm">{success}</div>}
+      {error && <div className="text-red-400 text-sm">{error}</div>}
+      {success && <div className="text-emerald-400 text-sm">{success}</div>}
       {/* Search repairs */}
       <div className="flex items-center justify-between gap-3">
         <input
-          className="border rounded-md p-2 text-sm w-full max-w-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+          className="border border-[#A48AFB] bg-[#0f1218] text-white placeholder-slate-400 rounded-md p-2 text-sm w-full max-w-xs focus:outline-none focus:ring-2 focus:ring-[#A48AFB] focus:border-[#A48AFB] hover:border-[#A48AFB]/50 transition-colors"
           placeholder="Search repairs..."
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
       </div>
       {loading ? (
-        <div>Loading...</div>
+        <div className="text-white">Loading...</div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border shadow-card">
-          <table className="min-w-full text-sm rounded-lg overflow-hidden">
-            <thead className="text-slate-600">
+        <div className="overflow-x-auto rounded-2xl border border-white/10 bg-[#12151d] shadow-card">
+          <table className="min-w-full text-sm rounded-lg overflow-hidden text-white">
+            <thead className="text-slate-300">
               <tr>
                 <th className="text-left py-2 px-3">ID</th>
                 <th className="text-left py-2 px-3">Device</th>
@@ -191,7 +192,7 @@ const Repairs: React.FC = () => {
                   return hay.includes(s)
                 })
                 .map((r, idx) => (
-                <tr key={r.id} className={idx % 2 === 0 ? 'border-t' : 'border-t  hover:bg-slate-100'}>
+                <tr key={r.id} className={idx % 2 === 0 ? 'border-t border-white/10' : 'border-t border-white/10 hover:bg-white/5'}>
                   <td className="py-2 px-3 font-mono text-xs">{r.id}</td>
                   <td className="py-2 px-3">{r.deviceType} • {r.brand} {r.model}</td>
                   <td className="py-2 px-3">
@@ -199,7 +200,7 @@ const Repairs: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${statusPill(r.status)}`}>{r.status}</span>
                         <select
-                          className="border rounded-md p-1 text-sm w-40 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                          className="border border-white/10 bg-[#0f1218] text-white rounded-md p-1 text-sm w-40 focus:outline-none focus:ring-2 focus:ring-[#A48AFB] focus:border-[#A48AFB]"
                           value={editStatus[r.id] ?? r.status}
                           onChange={(e) => setEditStatus({ ...editStatus, [r.id]: e.target.value })}
                         >
@@ -216,7 +217,7 @@ const Repairs: React.FC = () => {
                     {/* Assign technician */}
                     <div className="flex items-center gap-2">
                       <select
-                        className="border rounded-md p-1 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        className="border border-white/10 bg-[#0f1218] text-white rounded-md p-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#A48AFB] focus:border-[#A48AFB]"
                         value={assignChoice[r.id] ?? ''}
                         onChange={(e) => setAssignChoice({ ...assignChoice, [r.id]: e.target.value })}
                       >

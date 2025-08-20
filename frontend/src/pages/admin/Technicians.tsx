@@ -3,10 +3,10 @@ import { api, type ApiError } from '@/api/client'
 
 type Technician = {
   id: string
-  email: string
+  mobile: string
   firstName: string
   lastName: string
-  phone?: string
+  address?: string
   isActive: boolean
 }
 
@@ -17,19 +17,11 @@ const Technicians: React.FC = () => {
   const [success, setSuccess] = useState<string | null>(null)
   const [q, setQ] = useState('')
 
-  // Create technician form state
-  const [newTech, setNewTech] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
-    password: '',
-  })
-  const [creating, setCreating] = useState(false)
-
-  // Promote existing user form state
-  const [promoteEmail, setPromoteEmail] = useState('')
+  // Promote existing user by mobile
+  const [promoteMobile, setPromoteMobile] = useState('')
   const [promoting, setPromoting] = useState(false)
+  const [demotingId, setDemotingId] = useState<string | null>(null)
+  const [confirmRevert, setConfirmRevert] = useState<{ id: string; name: string } | null>(null)
 
   async function load() {
     setLoading(true)
@@ -48,117 +40,46 @@ const Technicians: React.FC = () => {
   useEffect(() => { load() }, [])
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 text-white">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold tracking-tight text-slate-800">Technicians</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-white">Technicians</h1>
       </div>
-      {error && <div className="text-red-600 text-sm">{error}</div>}
-      {success && <div className="text-green-700 text-sm">{success}</div>}
+      {error && <div className="text-red-400 text-sm">{error}</div>}
+      {success && <div className="text-emerald-400 text-sm">{success}</div>}
 
       {/* Search technicians */}
       <div className="flex items-center justify-between gap-3">
         <input
-          className="border rounded-md p-2 text-sm w-full max-w-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+          className="border  border-[#A48AFB] bg-[#0f1218] text-white placeholder-slate-400 rounded-md p-2 text-sm w-full max-w-xs focus:outline-none focus:ring-2 focus:ring-[#A48AFB] focus:border-[#A48AFB] hover:border-[#A48AFB]/50 transition-colors"
           placeholder="Search technicians..."
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
       </div>
 
-      {/* Create new Technician */}
-      <div className=" border rounded-2xl p-4 space-y-3 shadow-card">
-        <h2 className="font-medium">Create New Technician</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <input
-            className="border rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-            placeholder="First name"
-            value={newTech.firstName}
-            onChange={(e) => setNewTech({ ...newTech, firstName: e.target.value })}
-          />
-          <input
-            className="border rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-            placeholder="Last name"
-            value={newTech.lastName}
-            onChange={(e) => setNewTech({ ...newTech, lastName: e.target.value })}
-          />
-          <input
-            className="border rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-            placeholder="Email"
-            type="email"
-            value={newTech.email}
-            onChange={(e) => setNewTech({ ...newTech, email: e.target.value })}
-          />
-          <input
-            className="border rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-            placeholder="Phone (optional)"
-            value={newTech.phone}
-            onChange={(e) => setNewTech({ ...newTech, phone: e.target.value })}
-          />
-          <input
-            className="border rounded-md p-2 md:col-span-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-            placeholder="Temporary password"
-            type="password"
-            value={newTech.password}
-            onChange={(e) => setNewTech({ ...newTech, password: e.target.value })}
-          />
-        </div>
-        <button
-          className="px-3 py-2 bg-slate-800 text-white rounded disabled:opacity-60"
-          disabled={creating}
-          onClick={async () => {
-            setError(null)
-            setSuccess(null)
-            setCreating(true)
-            try {
-              // Step 1: register user (defaults to customer)
-              const reg = await api.post('/auth/register', {
-                email: newTech.email,
-                password: newTech.password,
-                firstName: newTech.firstName,
-                lastName: newTech.lastName,
-                phone: newTech.phone || undefined,
-              })
-              const userId = reg.data?.user?.id as string | undefined
-              if (!userId) throw new Error('Register succeeded but no user id returned')
-              // Step 2: promote to technician (admin-only)
-              await api.post('/auth/promote', { userId, role: 'technician' })
-              setSuccess('Technician created successfully')
-              setNewTech({ firstName: '', lastName: '', email: '', phone: '', password: '' })
-              await load()
-            } catch (e: any) {
-              const err = (e?.response?.data as ApiError) || {}
-              setError(err.message || 'Failed to create technician')
-            } finally {
-              setCreating(false)
-            }
-          }}
-        >
-          {creating ? 'Creating...' : 'Create Technician'}
-        </button>
-      </div>
-
-      {/* Promote existing user to Technician */}
-      <div className=" border rounded-2xl p-4 space-y-3 shadow-card">
-        <h2 className="font-medium">Promote Existing User to Technician</h2>
+      {/* Promote existing user to Technician by Mobile */}
+      <div className=" border border-white/10 rounded-2xl p-4 space-y-3 shadow-card bg-[#12151d]">
+        <h2 className="font-medium text-white">Promote Existing User to Technician</h2>
         <div className="flex gap-3 items-center">
           <input
-            className="border rounded-md p-2 flex-1 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-            placeholder="User email"
-            type="email"
-            value={promoteEmail}
-            onChange={(e) => setPromoteEmail(e.target.value)}
+            className="border border-[#A48AFB]/30 bg-[#0f1218] text-white rounded-md p-2 flex-1 focus:outline-none focus:ring-2 focus:ring-[#A48AFB] focus:border-[#A48AFB] hover:border-[#A48AFB]/50 transition-colors"
+            placeholder="User mobile (10 digits)"
+            type="tel"
+            pattern="^[6-9]\d{9}$"
+            value={promoteMobile}
+            onChange={(e) => setPromoteMobile(e.target.value)}
           />
           <button
-            className="px-3 py-2 bg-slate-700 text-white rounded disabled:opacity-60"
-            disabled={promoting || !promoteEmail}
+            className="btn"
+            disabled={promoting || !promoteMobile}
             onClick={async () => {
               setError(null)
               setSuccess(null)
               setPromoting(true)
               try {
-                await api.post('/auth/promote', { email: promoteEmail, role: 'technician' })
+                await api.post('/auth/promote', { mobile: promoteMobile, role: 'technician' })
                 setSuccess('User promoted to technician')
-                setPromoteEmail('')
+                setPromoteMobile('')
                 await load()
               } catch (e: any) {
                 const err = (e?.response?.data as ApiError) || {}
@@ -173,16 +94,16 @@ const Technicians: React.FC = () => {
         </div>
       </div>
       {loading ? (
-        <div>Loading...</div>
+        <div className="text-white">Loading...</div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border shadow-card">
-          <table className="min-w-full text-sm rounded-lg overflow-hidden">
-            <thead className="text-slate-600">
+        <div className="overflow-x-auto rounded-2xl border border-white/10 bg-[#12151d] shadow-card">
+          <table className="min-w-full text-sm rounded-lg overflow-hidden text-white">
+            <thead className="text-slate-300">
               <tr>
                 <th className="text-left py-2 px-3">Name</th>
-                <th className="text-left py-2 px-3">Email</th>
-                <th className="text-left py-2 px-3">Phone</th>
+                <th className="text-left py-2 px-3">Mobile</th>
                 <th className="text-left py-2 px-3">Active</th>
+                <th className="text-left py-2 px-3">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -193,8 +114,7 @@ const Technicians: React.FC = () => {
                   const hay = [
                     r.firstName,
                     r.lastName,
-                    r.email,
-                    r.phone,
+                    r.mobile,
                     r.isActive ? 'active' : 'inactive',
                   ]
                     .filter(Boolean)
@@ -203,17 +123,66 @@ const Technicians: React.FC = () => {
                   return hay.includes(s)
                 })
                 .map((r, idx) => (
-                <tr key={r.id} className={idx % 2 === 0 ? 'border-t' : 'border-t bg-white hover:bg-slate-100'}>
+                <tr key={r.id} className={idx % 2 === 0 ? 'border-t border-white/10' : 'border-t border-white/10 hover:bg-white/5'}>
                   <td className="py-2 px-3">{r.firstName} {r.lastName}</td>
-                  <td className="py-2 px-3">{r.email}</td>
-                  <td className="py-2 px-3">{r.phone || '-'}</td>
+                  <td className="py-2 px-3">{r.mobile}</td>
                   <td className="py-2 px-3">
                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${r.isActive ? 'bg-emerald-200 text-emerald-800' : 'bg-rose-200 text-rose-800'}`}>{r.isActive ? 'active' : 'inactive'}</span>
+                  </td>
+                  <td className="py-2 px-3">
+                    <button
+                      className="btn"
+                      disabled={demotingId === r.id}
+                      onClick={() => setConfirmRevert({ id: r.id, name: `${r.firstName} ${r.lastName}` })}
+                    >
+                      {demotingId === r.id ? 'Reverting...' : 'Revert to Customer'}
+                    </button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+      {/* Themed confirmation modal for revert */}
+      {confirmRevert && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setConfirmRevert(null)} />
+          <div className="relative w-full max-w-md rounded-2xl border border-white/10 bg-[#12151d] shadow-xl text-white">
+            <div className="p-4 border-b border-white/10">
+              <h3 className="text-lg font-semibold">Revert Technician</h3>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-slate-300 text-sm">Are you sure you want to revert <span className="font-medium text-white">{confirmRevert.name}</span> back to a customer?</p>
+              <p className="text-slate-400 text-xs">This will change their role to customer. You can promote again later if needed.</p>
+            </div>
+            <div className="p-4 border-t border-white/10 flex items-center justify-end gap-2">
+              <button className="btn-outline" onClick={() => setConfirmRevert(null)}>Cancel</button>
+              <button
+                className="btn"
+                disabled={!!demotingId}
+                onClick={async () => {
+                  if (!confirmRevert) return
+                  setError(null)
+                  setSuccess(null)
+                  setDemotingId(confirmRevert.id)
+                  try {
+                    await api.post('/auth/promote', { userId: confirmRevert.id, role: 'customer' })
+                    setSuccess('Technician reverted to customer')
+                    setConfirmRevert(null)
+                    await load()
+                  } catch (e: any) {
+                    const err = (e?.response?.data as ApiError) || {}
+                    setError(err.message || 'Failed to revert role')
+                  } finally {
+                    setDemotingId(null)
+                  }
+                }}
+              >
+                {demotingId ? 'Reverting...' : 'Confirm Revert'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

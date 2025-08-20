@@ -1,6 +1,5 @@
 import { DataTypes, Model, Optional } from 'sequelize';
 import sequelize from '../config/database';
-import bcrypt from 'bcryptjs';
 
 export enum UserRole {
   ADMIN = 'admin',
@@ -10,11 +9,10 @@ export enum UserRole {
 
 interface UserAttributes {
   id: string;
-  email: string;
-  password?: string;
+  mobile: string; // Indian mobile number used for login
   firstName: string;
   lastName: string;
-  phone?: string;
+  address?: string | null;
   role: UserRole;
   isActive: boolean;
   isVerified: boolean;
@@ -27,7 +25,7 @@ interface UserAttributes {
 interface UserCreationAttributes
   extends Optional<
     UserAttributes,
-    'id' | 'isActive' | 'isVerified' | 'otpCode' | 'otpExpiresAt' | 'password' | 'createdAt' | 'updatedAt'
+    'id' | 'isActive' | 'isVerified' | 'otpCode' | 'otpExpiresAt' | 'address' | 'createdAt' | 'updatedAt'
   > {}
 
 class User
@@ -35,11 +33,10 @@ class User
   implements UserAttributes
 {
   public id!: string;
-  public email!: string;
-  public password?: string;
+  public mobile!: string;
   public firstName!: string;
   public lastName!: string;
-  public phone?: string;
+  public address?: string | null;
   public role!: UserRole;
   public isActive!: boolean;
   public isVerified!: boolean;
@@ -48,14 +45,8 @@ class User
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 
-  public async comparePassword(password: string): Promise<boolean> {
-    if (!this.password) return false;
-    return bcrypt.compare(password, this.password);
-  }
-
   public toJSON() {
     const values = { ...this.get() } as any;
-    delete values.password;
     return values;
   }
 }
@@ -67,15 +58,14 @@ User.init(
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
     },
-    email: {
-      type: DataTypes.STRING,
-      allowNull: false,
-      unique: true,
-      validate: { isEmail: true },
-    },
-    password: {
+    mobile: {
       type: DataTypes.STRING,
       allowNull: true,
+      unique: true,
+      validate: {
+        // Indian mobile numbers starting with 6-9 and total 10 digits
+        is: /^[6-9]\d{9}$/,
+      },
     },
     firstName: {
       type: DataTypes.STRING,
@@ -85,7 +75,7 @@ User.init(
       type: DataTypes.STRING,
       allowNull: false,
     },
-    phone: {
+    address: {
       type: DataTypes.STRING,
       allowNull: true,
     },
@@ -116,16 +106,7 @@ User.init(
     modelName: 'User',
     tableName: 'users',
     timestamps: true,
-    hooks: {
-      beforeCreate: async (user: User) => {
-        if (user.password) user.password = await bcrypt.hash(user.password, 12);
-      },
-      beforeUpdate: async (user: User) => {
-        if (user.changed('password') && user.password) {
-          user.password = await bcrypt.hash(user.password, 12);
-        }
-      },
-    },
+    hooks: {},
   }
 );
 

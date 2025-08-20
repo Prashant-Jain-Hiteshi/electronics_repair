@@ -31,11 +31,10 @@ router.post(
   requireAuth,
   requireRole(['admin']),
   [
-    body('email').isEmail(),
-    body('password').isLength({ min: 6 }),
+    body('mobile').matches(/^[6-9]\d{9}$/),
     body('firstName').notEmpty(),
     body('lastName').notEmpty(),
-    body('phone').optional().isString(),
+    body('address').optional().isString(),
   ],
   handleValidation,
   adminCreateCustomer
@@ -45,7 +44,14 @@ router.put(
   '/:id',
   requireAuth,
   requireRole(['admin']),
-  [param('id').isString()],
+  [
+    param('id').isString(),
+    body('mobile').optional().matches(/^[6-9]\d{9}$/),
+    body('firstName').optional().isString(),
+    body('lastName').optional().isString(),
+    body('address').optional().isString(),
+    body('isActive').optional().isBoolean(),
+  ],
   handleValidation,
   adminUpdateCustomer
 );

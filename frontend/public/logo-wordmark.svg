@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ElectroFix Wordmark: icon + text tuned for dark UI -->
+<svg width="512" height="160" viewBox="0 0 512 160" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">ElectroFix — Electrical Repair</title>
+  <desc id="desc">A house with plug and a hand holding a wrench, with ElectroFix brand text and Electrical Repair tagline</desc>
+  <defs>
+    <style>
+      .accent { fill:#A48AFB; }
+      .ink { fill:#E8EAF3; }
+      .ink-muted { fill:#C9CCDB; }
+    </style>
+  </defs>
+
+  <!-- Icon (left) -->
+  <g transform="translate(12,16)">
+    <!-- Roof -->
+    <path class="accent" d="M16 58 L64 24 L112 58 L112 68 L100 68 L100 58 L64 34 L28 58 L28 68 L16 68 Z"/>
+    <!-- Body -->
+    <rect x="28" y="58" width="72" height="48" rx="5" class="ink"/>
+    <!-- Window -->
+    <rect x="56" y="70" width="10" height="10" class="ink-muted"/>
+    <rect x="70" y="70" width="10" height="10" class="ink-muted"/>
+    <rect x="56" y="84" width="10" height="10" class="ink-muted"/>
+    <rect x="70" y="84" width="10" height="10" class="ink-muted"/>
+
+    <!-- Plug (left side) -->
+    <g transform="translate(22,48)">
+      <rect x="0" y="24" width="18" height="28" rx="3" class="ink"/>
+      <rect x="3" y="18" width="4" height="10" rx="1" class="ink"/>
+      <rect x="11" y="18" width="4" height="10" rx="1" class="ink"/>
+      <path class="accent" d="M7 34 l7 -9 h-3 l2 -7 l-7 9 h3 z"/>
+    </g>
+
+    <!-- Hand + wrench (bottom) -->
+    <g transform="translate(8,110)">
+      <rect x="0" y="0" width="120" height="12" rx="6" class="ink"/>
+      <path class="ink" d="M120 6 c9 -7 9 -16 0 -23 c7 2 14 9 14 16 s-7 14 -14 16 z" transform="translate(-5,7)"/>
+      <rect x="28" y="-12" width="9" height="24" rx="3.5" class="ink"/>
+      <rect x="40" y="-12" width="9" height="24" rx="3.5" class="ink"/>
+      <rect x="52" y="-12" width="9" height="24" rx="3.5" class="ink"/>
+      <rect x="64" y="-12" width="9" height="24" rx="3.5" class="ink"/>
+    </g>
+  </g>
+
+  <!-- Wordmark (right) -->
+  <g transform="translate(152,40)">
+    <!-- Brand name -->
+    <text x="0" y="36" font-family="Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial" font-size="40" font-weight="700" letter-spacing="0.5" class="ink">Electro</text>
+    <text x="190" y="36" font-family="Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial" font-size="40" font-weight="700" letter-spacing="0.5" class="accent">Fix</text>
+    <!-- Tagline -->
+    <text x="0" y="70" font-family="Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial" font-size="18" font-weight="500" class="ink-muted">Electrical Repair • Fast & Reliable Service</text>
+  </g>
+</svg>

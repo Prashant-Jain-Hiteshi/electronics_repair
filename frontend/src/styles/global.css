@@ -29,3 +29,79 @@ body {
 .link {
   @apply text-primary-600 hover:underline;
 }
+
+/* Auth dark theme (login) */
+.auth-dark {
+  /* overall background similar to screenshot */
+  background-color: #0b0d12; /* near black */
+  color: #e5e7eb; /* slate-200 */
+}
+
+.auth-dark .auth-panel {
+  background-color: #0b0d12;
+}
+
+.auth-dark .auth-card {
+  background-color: #12151d; /* panel */
+  border-color: #2a2f3a;    /* subtle border */
+  color: #e5e7eb;
+}
+
+.auth-dark .input {
+  @apply placeholder-slate-400;
+  background-color: #0f1218;
+  border-color: #2a2f3a;
+  color: #e5e7eb;
+  /* purple accent #A48AFB */
+  --tw-ring-color: #A48AFB;
+}
+
+.auth-dark .input:focus {
+  border-color: #A48AFB;
+}
+
+.auth-dark .btn {
+  background-color: #A48AFB;
+  color: #ffffff; /* white text on purple */
+}
+
+.auth-dark .btn:hover {
+  background-color: #9a86f6;
+}
+
+.auth-dark .link {
+  color: #A48AFB;
+}
+
+/* Typography inside auth card – force white for readability on dark */
+.auth-dark .auth-card h1,
+.auth-dark .auth-card h2,
+.auth-dark .auth-card h3,
+.auth-dark .auth-card label,
+.auth-dark .auth-card p:not([class*="text-red"]),
+.auth-dark .auth-card span.help,
+.auth-dark .auth-card small,
+.auth-dark .auth-card .text-slate-700,
+.auth-dark .auth-card .text-slate-600,
+.auth-dark .auth-card .text-slate-500 {
+  color: #ffffff !important;
+}
+
+/* Dark theme selects and options */
+.auth-dark select {
+  color-scheme: dark;
+}
+
+/* Background/text for dropdown list */
+.auth-dark select option {
+  background-color: #0f1218;
+  color: #e5e7eb;
+}
+
+/* Hover and selected option highlight to purple */
+.auth-dark select option:hover,
+.auth-dark select option:checked,
+.auth-dark select:focus option:checked {
+  background-color: #A48AFB !important;
+  color: #0b0d12 !important;
+}

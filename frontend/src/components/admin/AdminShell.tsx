@@ -14,47 +14,56 @@ const navItems = [
 const AdminShell: React.FC = () => {
   const { user, logout } = useAuth()
   const [open, setOpen] = useState(false)
+  const [confirmLogout, setConfirmLogout] = useState(false)
   const visibleNavItems = navItems.filter(i => i.to !== '/admin/inventory' && i.to !== '/admin/payments')
 
-  return (
-    <div className="min-h-screen relative overflow-hidden">
-      {/* Animated soft background (same as customer) */}
-      <div className="absolute inset-0 bg-gradient-to-br from-emerald-50 via-emerald-50 to-emerald-100" />
-      <span className="pointer-events-none absolute -top-8 -left-8 h-32 w-32 rounded-full bg-emerald-300/25 blur-2xl anim-float-slow" />
-      <span className="pointer-events-none absolute bottom-0 right-0 h-40 w-40 rounded-full bg-emerald-300/20 blur-2xl anim-float-rev" />
+  const base = (import.meta as any)?.env?.BASE_URL || '/'
 
-      {/* Mobile/Tablet top bar (sticky, visible < md) */}
-      <div className="md:hidden sticky top-0 z-20 flex items-center justify-between px-3 py-3 bg-white/80 backdrop-blur border-b">
-        <button aria-label="Open menu" className="rounded-md border bg-white/80 backdrop-blur px-3 py-2" onClick={() => setOpen(true)}>☰</button>
-        <Link to="/admin" className="font-semibold text-slate-800">ElectroFix</Link>
-        <span className="text-xs px-2 py-1 rounded border">Admin</span>
+  return (
+    <div className="auth-dark min-h-screen relative overflow-hidden">
+      {/* Dark background to match theme */}
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,#0b0d12_0%,#0f1218_100%)]" />
+      <span className="pointer-events-none absolute -top-8 -left-8 h-32 w-32 rounded-full bg-[#A48AFB]/10 blur-2xl anim-float-slow" />
+      <span className="pointer-events-none absolute bottom-0 right-0 h-40 w-40 rounded-full bg-[#A48AFB]/10 blur-2xl anim-float-rev" />
+
+      {/* Mobile/Tablet top bar (fixed, visible < md) */}
+      <div className="md:hidden fixed top-0 inset-x-0 z-30 flex items-center justify-between px-3 py-3 bg-[#0b0d12]/80 backdrop-blur border-b border-white/10 text-white">
+        <button aria-label="Open menu" className="rounded-md border border-white/10 bg-white/5 px-3 py-2" onClick={() => setOpen(true)}>☰</button>
+        <Link to="/admin" className="flex items-center gap-2 font-semibold text-white">
+          <img src={`${base}logo.svg`} alt="Electro-Repair" className="h-6 w-auto" />
+          <span>Electro-Repair</span>
+        </Link>
+        <span className="text-xs px-2 py-1 rounded border border-white/10">Admin</span>
       </div>
 
-      <div className="relative flex gap-3 p-3 items-stretch h-[calc(100vh-1.5rem)] sm:h-[calc(100vh-1.5rem)] overflow-hidden">
+      <div className="relative mt-14 md:mt-0 flex gap-3 p-3 items-stretch h-[calc(100vh-1.5rem)] sm:h-[calc(100vh-1.5rem)] overflow-hidden">
         {/* Sidebar - desktop sticky full height (visible ≥ md) */}
-        <aside className="hidden md:flex w-60 shrink-0 flex-col rounded-2xl border bg-gradient-to-br from-[#d1fae5] via-[#d1fae5]/75 to-[#a7f3d0] backdrop-blur shadow-sm p-4 sticky top-3 h-[calc(100vh-1.5rem)]">
-          <Link to="/admin" className="font-semibold text-slate-800 mb-4">ElectroFix</Link>
+        <aside className="hidden md:flex w-60 shrink-0 flex-col rounded-2xl border border-white/10 bg-[#12151d] backdrop-blur shadow-sm p-4 sticky top-3 h-[calc(100vh-1.5rem)] text-white">
+          <Link to="/admin" className="mb-4 flex items-center gap-2 font-semibold text-white">
+            <img src={`${base}logo.svg`} alt="Electro-Repair" className="h-7 w-auto" />
+            <span>Electro-Repair</span>
+          </Link>
           <nav className="flex flex-col gap-1 text-sm">
             {visibleNavItems.map(i => (
               <NavLink
                 key={i.to}
                 to={i.to}
                 end
-                className={({isActive}) => `rounded-lg px-3 py-2 hover:bg-slate-50 ${isActive ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : ''}`}
+                className={({isActive}) => `rounded-lg px-3 py-2 text-white hover:bg-white/5 ${isActive ? 'bg-white/10 border border-white/10' : ''}`}
               >
                 {i.label}
               </NavLink>
             ))}
           </nav>
-          <div className="mt-auto pt-4 border-t text-xs text-slate-600">
+          <div className="mt-auto pt-4 border-t border-white/10 text-xs text-slate-300">
             <div className="mb-2">{user?.firstName} {user?.lastName} • Admin</div>
-            <button onClick={logout} className="rounded-md border px-3 py-1.5 hover:bg-slate-50 w-full">Logout</button>
+            <button onClick={() => setConfirmLogout(true)} className="rounded-md border border-white/10 px-3 py-1.5 hover:bg-white/5 w-full text-white">Logout</button>
           </div>
         </aside>
 
         {/* Main (independent scroll) */}
         <main className="flex-1 overflow-y-auto">
-          <div className="rounded-2xl border backdrop-blur p-4 shadow-sm h-full">
+          <div className="rounded-2xl border border-white/10 auth-card backdrop-blur p-4 shadow-sm h-full">
             <Outlet />
           </div>
         </main>
@@ -62,12 +71,15 @@ const AdminShell: React.FC = () => {
 
       {/* Mobile drawer sidebar */}
       {open && (
-        <div className="fixed inset-0 z-30 sm:hidden">
-          <div className="absolute inset-0 bg-black/30" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-0 h-full w-72 bg-gradient-to-b from-[#d1fae5] via-[#d1fae5]/75 to-[#a7f3d0] shadow-xl p-4 flex flex-col">
+        <div className="fixed inset-0 z-30 md:hidden">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-0 h-full w-72 bg-[#12151d] border-r border-white/10 shadow-xl p-4 flex flex-col text-white">
             <div className="flex items-center justify-between mb-3">
-              <span className="font-semibold text-slate-800">ElectroFix • Admin</span>
-              <button aria-label="Close" className="rounded-md border px-2 py-1" onClick={() => setOpen(false)}>✕</button>
+              <span className="font-semibold text-white flex items-center gap-2">
+                <img src={`${base}logo.svg`} alt="Electro-Repair" className="h-6 w-auto" />
+                <span>Electro-Repair • Admin</span>
+              </span>
+              <button aria-label="Close" className="rounded-md border border-white/10 px-2 py-1 hover:bg-white/5" onClick={() => setOpen(false)}>✕</button>
             </div>
             <nav className="flex flex-col gap-1 text-sm">
               {visibleNavItems.map(i => (
@@ -76,15 +88,15 @@ const AdminShell: React.FC = () => {
                   to={i.to}
                   end
                   onClick={() => setOpen(false)}
-                  className={({isActive}) => `rounded-lg px-3 py-2 hover:bg-slate-50 ${isActive ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : ''}`}
+                  className={({isActive}) => `rounded-lg px-3 py-2 text-white hover:bg-white/5 ${isActive ? 'bg-white/10 border border-white/10' : ''}`}
                 >
                   {i.label}
                 </NavLink>
               ))}
             </nav>
-            <div className="mt-auto pt-4 text-xs text-slate-600">
+            <div className="mt-auto pt-4 text-xs text-slate-300">
               <div className="mb-2">{user?.firstName} {user?.lastName}</div>
-              <button onClick={() => { setOpen(false); logout(); }} className="rounded-md border px-3 py-1.5 hover:bg-slate-50 w-full">Logout</button>
+              <button onClick={() => { setOpen(false); setConfirmLogout(true); }} className="rounded-md border border-white/10 px-3 py-1.5 hover:bg-white/5 w-full text-white">Logout</button>
             </div>
           </div>
         </div>
@@ -97,6 +109,33 @@ const AdminShell: React.FC = () => {
         .anim-float-slow { animation: floatY 14s ease-in-out infinite; }
         .anim-float-rev { animation: floatYrev 16s ease-in-out infinite; }
       `}</style>
+
+      {/* Themed confirmation modal for logout */}
+      {confirmLogout && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setConfirmLogout(false)} />
+          <div className="relative w-full max-w-sm rounded-2xl border border-white/10 bg-[#12151d] shadow-xl text-white">
+            <div className="p-4 border-b border-white/10">
+              <h3 className="text-lg font-semibold">Confirm Logout</h3>
+            </div>
+            <div className="p-4 space-y-2 text-sm">
+              <p className="text-slate-300">Are you sure you want to logout from the admin dashboard?</p>
+            </div>
+            <div className="p-4 border-t border-white/10 flex items-center justify-end gap-2">
+              <button className="btn-outline" onClick={() => setConfirmLogout(false)}>Cancel</button>
+              <button
+                className="btn"
+                onClick={() => {
+                  setConfirmLogout(false)
+                  logout()
+                }}
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

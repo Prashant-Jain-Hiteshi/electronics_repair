@@ -27,10 +27,9 @@ type Customer = {
 
 type User = {
   id: string
-  email: string
+  mobile: string
   firstName: string
   lastName: string
-  phone?: string
 }
 
 const statusColors: Record<string, string> = {
@@ -82,64 +81,63 @@ const AdminRepairDetails: React.FC = () => {
     return [repair.brand, repair.model].filter(Boolean).join(' ') || repair.deviceType || '-'
   }, [repair])
 
-  if (loading) return <div>Loading...</div>
-  if (error) return <div className="text-rose-700">{error}</div>
-  if (!repair) return <div>Not found</div>
+  if (loading) return <div className="text-white">Loading...</div>
+  if (error) return <div className="text-rose-400">{error}</div>
+  if (!repair) return <div className="text-white">Not found</div>
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 text-white">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Repair Details (Admin)</h1>
         <div className="flex gap-2">
-          <Link to="/admin/repairs" className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50">Back</Link>
-          <a href={`/api/repairs/${repair.id}/invoice`} target="_blank" rel="noreferrer" className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50">Invoice</a>
+          <Link to="/admin/repairs" className="rounded-md border border-white/10 px-3 py-2 text-sm bg-white/5 hover:bg-white/10">Back</Link>
+          <a href={`/api/repairs/${repair.id}/invoice`} target="_blank" rel="noreferrer" className="rounded-md border border-white/10 px-3 py-2 text-sm bg-white/5 hover:bg-white/10">Invoice</a>
         </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-lg bg-white p-4 shadow-card sm:col-span-2">
+        <div className="rounded-lg bg-[#12151d] border border-white/10 p-4 shadow-card sm:col-span-2">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <p className="text-xs text-slate-500">Ticket</p>
-              <p className="font-semibold">{repair.id.slice(0,8)}</p>
+              <p className="text-xs text-slate-300">Ticket</p>
+              <p className="font-semibold text-white">{repair.id.slice(0,8)}</p>
             </div>
             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${statusColors[repair.status] || 'bg-slate-100 text-slate-700'}`}>{repair.status}</span>
           </div>
           <div className="grid sm:grid-cols-2 gap-3 text-sm">
             <div>
-              <p className="text-slate-500 text-xs">Device</p>
-              <p className="font-medium">{deviceText}</p>
+              <p className="text-slate-300 text-xs">Device</p>
+              <p className="font-medium text-white">{deviceText}</p>
             </div>
             <div>
-              <p className="text-slate-500 text-xs">Priority</p>
-              <p className="font-medium">{repair.priority || '-'}</p>
+              <p className="text-slate-300 text-xs">Priority</p>
+              <p className="font-medium text-white">{repair.priority || '-'}</p>
             </div>
             <div className="sm:col-span-2">
-              <p className="text-slate-500 text-xs">Issue</p>
-              <p className="font-medium">{repair.issueDescription || '-'}</p>
+              <p className="text-slate-300 text-xs">Issue</p>
+              <p className="font-medium text-white">{repair.issueDescription || '-'}</p>
             </div>
             <div>
-              <p className="text-slate-500 text-xs">Estimate</p>
-              <p className="font-medium">{formatCurrency(repair.estimatedCost ?? repair.actualCost)}</p>
+              <p className="text-slate-300 text-xs">Estimate</p>
+              <p className="font-medium text-white">{formatCurrency(repair.estimatedCost ?? repair.actualCost)}</p>
             </div>
             <div>
-              <p className="text-slate-500 text-xs">ETA</p>
-              <p className="font-medium">{repair.estimatedCompletionDate ? new Date(repair.estimatedCompletionDate).toLocaleDateString() : '-'}</p>
+              <p className="text-slate-300 text-xs">ETA</p>
+              <p className="font-medium text-white">{repair.estimatedCompletionDate ? new Date(repair.estimatedCompletionDate).toLocaleDateString() : '-'}</p>
             </div>
           </div>
         </div>
 
-        <div className="rounded-lg bg-white p-4 shadow-card">
-          <p className="text-sm font-semibold mb-2">Customer</p>
+        <div className="rounded-lg bg-[#12151d] border border-white/10 p-4 shadow-card">
+          <p className="text-sm font-semibold mb-2 text-white">Customer</p>
           {!user ? (
-            <div className="text-sm text-slate-500">No customer info</div>
+            <div className="text-sm text-slate-300">No customer info</div>
           ) : (
             <div className="space-y-1 text-sm">
-              <div className="font-medium">{user.firstName} {user.lastName}</div>
-              <div className="text-slate-600">{user.email}</div>
-              {user.phone && <div className="text-slate-600">{user.phone}</div>}
+              <div className="font-medium text-white">{user.firstName} {user.lastName}</div>
+              <div className="text-slate-300">{user.mobile}</div>
               {customer && (
-                <div className="text-slate-600 text-xs">
+                <div className="text-slate-300 text-xs">
                   {[customer.address, customer.city, customer.state, customer.zipCode].filter(Boolean).join(', ') || '-'}
                 </div>
               )}

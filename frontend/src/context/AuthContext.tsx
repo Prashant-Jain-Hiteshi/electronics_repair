@@ -1,22 +1,21 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { api } from '@/api/client'
+ import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
+ import { api } from '@/api/client'
 
-export type User = {
+ export type User = {
   id: string
-  email: string
+  mobile: string
   role: 'admin' | 'technician' | 'customer'
   firstName: string
   lastName: string
-  phone?: string | null
+  address?: string | null
 }
 
-type AuthState = {
+ type AuthState = {
   user: User | null
   token: string | null
   loading: boolean
-  requestLoginOtp: (email: string) => Promise<void>
-  verifyOtp: (email: string, otp: string) => Promise<void>
-  signupStart: (payload: { email: string; firstName: string; lastName: string; phone?: string }) => Promise<void>
+  requestOtp: (mobile: string) => Promise<{ exists: boolean; otp: string }>
+  verifyOtp: (payload: { mobile: string; otp: string; firstName?: string; lastName?: string; address?: string }) => Promise<void>
   logout: () => void
   fetchMe: () => Promise<void>
 }
@@ -45,16 +44,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const requestLoginOtp = async (email: string) => {
-    await api.post('/auth/login/request-otp', { email })
+  const requestOtp = async (mobile: string) => {
+    const { data } = await api.post('/auth/request-otp', { mobile })
+    return { exists: !!data?.exists, otp: String(data?.otp || '') }
   }
 
-  const signupStart = async (payload: { email: string; firstName: string; lastName: string; phone?: string }) => {
-    await api.post('/auth/signup', payload)
-  }
-
-  const verifyOtp = async (email: string, otp: string) => {
-    const { data } = await api.post('/auth/verify-otp', { email, otp })
+  const verifyOtp = async (payload: { mobile: string; otp: string; firstName?: string; lastName?: string; address?: string }) => {
+    const { data } = await api.post('/auth/verify-otp', payload)
     const tk: string | undefined = data?.token
     const u: User | undefined = data?.user
     if (tk) {
@@ -77,7 +73,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   const value = useMemo(
-    () => ({ user, token, loading, requestLoginOtp, verifyOtp, signupStart, logout, fetchMe }),
+    () => ({ user, token, loading, requestOtp, verifyOtp, logout, fetchMe }),
     [user, token, loading]
   )
 

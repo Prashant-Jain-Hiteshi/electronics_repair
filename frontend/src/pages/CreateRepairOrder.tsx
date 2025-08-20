@@ -1,8 +1,15 @@
-import React, { useMemo, useState } from 'react'
+import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '@/api/client'
+import ThemedSelect from '@/components/common/ThemedSelect'
 
-const deviceTypes = ['Laptop', 'Phone', 'Tablet', 'Desktop', 'Smart Watch', 'Camera', 'Other']
+const deviceTypes = [
+  'Home Appliances',
+  'Consumer Electronics',
+  'Personal Devices',
+  'Computer Accessories',
+  'Other Electronics',
+]
 
 const CreateRepairOrder: React.FC = () => {
   const navigate = useNavigate()
@@ -10,39 +17,27 @@ const CreateRepairOrder: React.FC = () => {
   const [brand, setBrand] = useState('')
   const [model, setModel] = useState('')
   const [issue, setIssue] = useState('')
-  const [pickupDate, setPickupDate] = useState('')
-  const [images, setImages] = useState<File[]>([])
+  const [deviceName, setDeviceName] = useState('')
+  const [pickupAddress, setPickupAddress] = useState('')
+  const base = (import.meta as any)?.env?.BASE_URL || '/'
+  
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [errors, setErrors] = useState<{ [k: string]: string }>({})
 
-  const previews = useMemo(() => images.map((f) => URL.createObjectURL(f)), [images])
+  
 
-  const onImagesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || [])
-    if (!files.length) {
-      setImages([])
-      return
-    }
-    // validations: max 6, allowed types, size <= 5MB
-    const allowed = ['image/jpeg', 'image/png', 'image/webp']
-    if (files.length > 6) {
-      setError('Please select up to 6 images.')
-      return
-    }
-    for (const f of files) {
-      if (!allowed.includes(f.type)) {
-        setError('Only JPG, PNG, or WEBP images are allowed.')
-        return
-      }
-      if (f.size > 5 * 1024 * 1024) {
-        setError('Each image must be under 5MB.')
-        return
-      }
-    }
-    setError(null)
-    const imgs = files.filter((f) => f.type.startsWith('image/'))
-    setImages(imgs)
+  function validate() {
+    const next: { [k: string]: string } = {}
+    if (!deviceType.trim()) next.deviceType = 'Please select a device type.'
+    if (!brand.trim()) next.brand = 'Brand is required.'
+    if (!model.trim()) next.model = 'Model is required.'
+    if (!deviceName.trim()) next.deviceName = 'Device name is required.'
+    if (!issue.trim()) next.issue = 'Please describe the issue.'
+    if (!pickupAddress.trim()) next.pickupAddress = 'Pickup address is required.'
+    setErrors(next)
+    return Object.keys(next).length === 0
   }
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -50,25 +45,20 @@ const CreateRepairOrder: React.FC = () => {
     setError(null)
     setSuccess(null)
 
-    if (!deviceType || !brand || !model || !issue) {
-      setError('Please fill all required fields.')
-      return
-    }
+    if (!validate()) return
 
     setSubmitting(true)
     try {
-      const fd = new FormData()
-      fd.append('deviceType', deviceType)
-      fd.append('deviceBrand', brand)
-      fd.append('deviceModel', model)
-      fd.append('issueDescription', issue)
-      if (pickupDate) fd.append('pickupDate', pickupDate)
-      images.forEach((img, idx) => fd.append('images', img, img.name || `image_${idx}.jpg`))
-
-      // NOTE: Backend must accept customer create. If currently technician-only, enable for customers too.
-      const { data } = await api.post('/repairs', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
+      const payload = {
+        deviceType,
+        deviceBrand: brand,
+        deviceModel: model,
+        issueDescription: issue,
+        deviceName,
+        pickupAddress,
+      }
+      // POST JSON payload (no images)
+      const { data } = await api.post('/repairs', payload)
 
       setSuccess('Repair order created successfully!')
       // Navigate to the newly created repair details to verify images immediately
@@ -88,23 +78,18 @@ const CreateRepairOrder: React.FC = () => {
     <div className="max-w-5xl mx-auto">
       {/* Header / Breadcrumb */}
       <div className="mb-4">
-        <div className="text-sm text-slate-600 mb-1">Home • My Orders • <span className="text-slate-900">New Repair</span></div>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-800">Create Repair Order</h1>
-        <p className="text-sm text-slate-600 mt-1">Tell us about your device and issue. We’ll assign the best technician for you.</p>
+        {/* <div className="text-sm text-slate-300 mb-1">Home • My Orders • <span className="text-white">New Repair</span></div> */}
+        <h1 className="text-2xl font-semibold tracking-tight text-white">Create Repair Order</h1>
+        <p className="text-sm text-slate-300 mt-1">Tell us about your device and issue. We’ll assign the best technician for you.</p>
       </div>
 
-      {/* Branded split card */}
-      <div className="grid grid-cols-1 md:grid-cols-5 rounded-2xl border bg-white/90 backdrop-blur shadow-lg overflow-hidden">
-        {/* Left: Branding / theme (smaller) */}
-        <div className="relative p-6 md:p-7 bg-gradient-to-br from-emerald-600 via-emerald-500 to-emerald-400 text-white md:col-span-2">
-          <div className="flex items-center gap-3">
-            {/* Simple inline logo mark */}
-            <div className="h-10 w-10 rounded-xl bg-white/15 ring-1 ring-white/20 flex items-center justify-center">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M7 17h4v4H9a2 2 0 0 1-2-2v-2Zm6 0h4v2a2 2 0 0 1-2 2h-2v-4ZM7 3h2v4H7V5a2 2 0 0 1 2-2Zm8 0a2 2 0 0 1 2 2v2h-2V3ZM5 7h14v10H5V7Z" fill="currentColor"/>
-              </svg>
-            </div>
-            <div className="text-lg font-semibold">ElectroFix</div>
+      {/* Branded stacked card: animation/banner on top, form below */}
+      <div className="rounded-2xl border auth-card backdrop-blur shadow-lg overflow-hidden">
+        {/* Top: Branding / theme banner */}
+        <div className="relative p-6 md:p-7 bg-gradient-to-br from-[#1a132b] via-[#3a2f6b] to-[#A48AFB] text-white">
+          <div className="flex items-center gap-2">
+            <img src={`${base}logo.svg`} alt="Electro-Repair" className="h-8 w-auto" />
+            <div className="text-lg font-semibold">Electro-Repair</div>
           </div>
 
           <div className="mt-6 max-w-sm">
@@ -171,63 +156,86 @@ const CreateRepairOrder: React.FC = () => {
           </div>
         </div>
 
-        {/* Right: Form */}
-        <div className="p-6 md:p-8 md:col-span-3">
-          {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
-          {success && <div className="mb-3 text-sm text-emerald-700">{success}</div>}
+        {/* Bottom: Form */}
+        <div className="p-6 md:p-8 border-t border-white/10 bg-[#0f1117]">
+          {error && <div className="mb-3 text-sm text-red-500">{error}</div>}
+          {success && <div className="mb-3 text-sm" style={{color:'#A48AFB'}}>{success}</div>}
 
           <form onSubmit={onSubmit} className="space-y-5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Device Type</label>
-                <select className="input border border-emerald-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" value={deviceType} onChange={(e) => setDeviceType(e.target.value)} required>
-                  <option value="" disabled>Select type</option>
-                  {deviceTypes.map((t) => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-                <p className="text-xs text-slate-500 mt-1">E.g., Laptop, Phone, Tablet</p>
+                <label className="block text-sm font-medium text-white mb-1">Device Type</label>
+                <ThemedSelect
+                  options={deviceTypes}
+                  value={deviceType}
+                  onChange={setDeviceType}
+                  placeholder="Select type"
+                />
+                <p className="text-xs text-slate-300 mt-1">E.g., Laptop, Phone, Tablet</p>
+                {errors.deviceType && <p className="text-xs text-red-400 mt-1">{errors.deviceType}</p>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Brand</label>
-                <input className="input border border-emerald-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="Apple, Samsung, Dell..." required />
+                <label className="block text-sm font-medium text-white mb-1">Brand</label>
+                <input
+                  className={`input border bg-transparent text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#A48AFB] focus:border-[#A48AFB] ${errors.brand ? 'border-red-500 ring-2 ring-red-500' : 'border-white/10'}`}
+                  value={brand}
+                  onChange={(e) => { setBrand(e.target.value); if (errors.brand) setErrors(prev => ({ ...prev, brand: '' })) }}
+                  placeholder="Apple, Samsung, Dell..."
+                />
+                {errors.brand && <p className="text-xs text-red-400 mt-1">{errors.brand}</p>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Model</label>
-                <input className="input border border-emerald-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" value={model} onChange={(e) => setModel(e.target.value)} placeholder="Model name or number" required />
+                <label className="block text-sm font-medium text-white mb-1">Model</label>
+                <input
+                  className={`input border bg-transparent text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#A48AFB] focus:border-[#A48AFB] ${errors.model ? 'border-red-500 ring-2 ring-red-500' : 'border-white/10'}`}
+                  value={model}
+                  onChange={(e) => { setModel(e.target.value); if (errors.model) setErrors(prev => ({ ...prev, model: '' })) }}
+                  placeholder="Model name or number"
+                />
+                {errors.model && <p className="text-xs text-red-400 mt-1">{errors.model}</p>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Pickup Date</label>
-                <input className="input border border-emerald-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" type="date" value={pickupDate} onChange={(e) => setPickupDate(e.target.value)} />
-                <p className="text-xs text-slate-500 mt-1">Optional — choose a convenient date</p>
+                <label className="block text-sm font-medium text-white mb-1">Device Name</label>
+                <input
+                  className={`input border bg-transparent text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#A48AFB] focus:border-[#A48AFB] ${errors.deviceName ? 'border-red-500 ring-2 ring-red-500' : 'border-white/10'}`}
+                  value={deviceName}
+                  onChange={(e) => { setDeviceName(e.target.value); if (errors.deviceName) setErrors(prev => ({ ...prev, deviceName: '' })) }}
+                  placeholder="Washing machine, TV, Mobile phone"
+                />
+                {errors.deviceName && <p className="text-xs text-red-400 mt-1">{errors.deviceName}</p>}
               </div>
+              
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Issue Description</label>
-              <textarea className="input border border-emerald-200 min-h-[120px] focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" value={issue} onChange={(e) => setIssue(e.target.value)} placeholder="Describe the problem in detail (symptoms, when it started, any liquids/shocks, etc.)" required />
+              <label className="block text-sm font-medium text-white mb-1">Issue Description</label>
+              <textarea
+                className={`input min-h[120px] border bg-transparent text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#A48AFB] focus:border-[#A48AFB] ${errors.issue ? 'border-red-500 ring-2 ring-red-500' : 'border-white/10'}`}
+                value={issue}
+                onChange={(e) => { setIssue(e.target.value); if (errors.issue) setErrors(prev => ({ ...prev, issue: '' })) }}
+                placeholder="Describe the problem in detail (symptoms, when it started, any liquids/shocks, etc.)"
+              />
+              {errors.issue && <p className="text-xs text-red-400 mt-1">{errors.issue}</p>}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Upload Images (optional)</label>
-              <div className="rounded-lg border-dashed border-2 border-emerald-100 hover:border-emerald-400 transition-colors p-4">
-                <input className="input border border-emerald-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" type="file" accept="image/*" multiple onChange={onImagesChange} />
-                <p className="text-xs text-slate-500 mt-2">Add up to 6 images (JPG, PNG, WEBP • Max 5MB each)</p>
-              </div>
-              {previews.length > 0 && (
-                <div className="mt-3 grid grid-cols-3 sm:grid-cols-6 gap-2">
-                  {previews.map((src, i) => (
-                    <img key={i} src={src} alt={`preview-${i}`} className="h-20 w-full object-cover rounded-md ring-1 ring-slate-200" />
-                  ))}
-                </div>
-              )}
+              <label className="block text-sm font-medium text-white mb-1">Pickup Address</label>
+              <textarea
+                className={`input min-h-[90px] border bg-transparent text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#A48AFB] focus:border-[#A48AFB] ${errors.pickupAddress ? 'border-red-500 ring-2 ring-red-500' : 'border-white/10'}`}
+                value={pickupAddress}
+                onChange={(e) => { setPickupAddress(e.target.value); if (errors.pickupAddress) setErrors(prev => ({ ...prev, pickupAddress: '' })) }}
+                placeholder="House/Flat, Street, Area, City, Pincode, Contact instructions"
+              />
+              {errors.pickupAddress && <p className="text-xs text-red-400 mt-1">{errors.pickupAddress}</p>}
             </div>
+
+            
 
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
-              <div className="text-xs text-slate-500">By submitting, you agree to our service terms and data policy.</div>
+              <div className="text-xs text-slate-300">By submitting, you agree to our service terms and data policy.</div>
               <div className="flex items-center gap-3">
-                <button className="btn bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60" disabled={submitting}>{submitting ? 'Submitting...' : 'Submit'}</button>
-                <button type="button" className="btn bg-slate-200 text-slate-800 hover:bg-slate-300" onClick={() => navigate(-1)}>Cancel</button>
+                <button className="btn" disabled={submitting}>{submitting ? 'Submitting...' : 'Submit'}</button>
+                <button type="button" className="inline-flex items-center justify-center rounded-md border border-white/10 px-4 py-2 text-sm text-white hover:bg-white/5" onClick={() => navigate(-1)}>Cancel</button>
               </div>
             </div>
           </form>

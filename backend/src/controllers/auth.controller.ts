@@ -1,15 +1,20 @@
-import { Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
-import User, { UserRole } from '../models/User';
-import { generateOtp, sendOtpEmail } from '../utils/mailer';
+ import { Request, Response } from 'express';
+ import jwt from 'jsonwebtoken';
+ import User, { UserRole } from '../models/User';
+ import { generateOtp } from '../utils/mailer';
+ import { sendOtpSms } from '../utils/twilio';
 
 function signToken(payload: object) {
   const secret = process.env.JWT_SECRET || 'dev_secret_change_me';
   return jwt.sign(payload, secret, { expiresIn: '7d' });
 }
 
+// Temporary in-memory OTP store for mobiles without a user yet
+// Map: mobile -> { code, expiresAt }
+const tempOtpStore: Map<string, { code: string; expiresAt: number }> = new Map();
+
 // Admin: list all technicians
-export async function listTechnicians(_req: Request, res: Response) {
+ export async function listTechnicians(_req: Request, res: Response) {
   try {
     const technicians = await User.findAll({ where: { role: UserRole.TECHNICIAN } as any });
     return res.status(200).json({ technicians: technicians.map((u) => u.toJSON()) });
@@ -19,91 +24,102 @@ export async function listTechnicians(_req: Request, res: Response) {
   }
 }
 
-// Signup (OTP-based, no password). Creates a customer and emails OTP.
-export async function signup(req: Request, res: Response) {
+// Request OTP for login/signup using mobile number. Returns exists flag and OTP for testing.
+export async function requestOtp(req: Request, res: Response) {
   try {
-    const { email, firstName, lastName, phone } = req.body || {};
-    if (!email || !firstName || !lastName) {
-      return res.status(400).json({ message: 'email, firstName, lastName are required' });
-    }
+    const { mobile } = req.body || {};
+    if (!mobile) return res.status(400).json({ message: 'Valid Indian mobile is required' });
+    // Validate Indian mobile number
+    const re = /^[6-9]\d{9}$/;
+    if (!re.test(mobile)) return res.status(400).json({ message: 'Valid Indian mobile is required' });
 
-    const exists = await User.findOne({ where: { email } });
-    if (exists) return res.status(409).json({ message: 'Email already registered' });
-
-    const code = generateOtp();
-    const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-
-    const user = await User.create({
-      email,
-      firstName,
-      lastName,
-      phone,
-      role: UserRole.CUSTOMER,
-      isVerified: false,
-      otpCode: code,
-      otpExpiresAt: expires,
-    } as any);
-
-    await sendOtpEmail(email, code, 'signup');
-    return res.status(201).json({ message: 'OTP sent to email', user: user.toJSON() });
-  } catch (err: any) {
-    console.error('Signup error:', err);
-    return res.status(500).json({ message: 'Internal server error' });
-  }
-}
-
-// Login request: send OTP to existing user
-export async function loginRequestOtp(req: Request, res: Response) {
-  try {
-    const { email } = req.body || {};
-    if (!email) return res.status(400).json({ message: 'email is required' });
-
-    const user = await User.findOne({ where: { email } });
-    if (!user) return res.status(404).json({ message: 'User not found' });
-    if (!user.isActive) return res.status(403).json({ message: 'User is inactive' });
-
+    const user = await User.findOne({ where: { mobile } });
     const code = generateOtp();
     const expires = new Date(Date.now() + 10 * 60 * 1000);
-    (user as any).otpCode = code;
-    (user as any).otpExpiresAt = expires;
-    await user.save();
-    await sendOtpEmail(email, code, 'login');
-    return res.status(200).json({ message: 'OTP sent to email' });
+
+    if (user) {
+      (user as any).otpCode = code;
+      (user as any).otpExpiresAt = expires;
+      await user.save();
+    } else {
+      tempOtpStore.set(mobile, { code, expiresAt: expires.getTime() });
+    }
+
+    // Send SMS via Twilio (best-effort). Also return OTP in response for testing.
+    try {
+      await sendOtpSms(mobile, code);
+    } catch (e) {
+      console.warn('Twilio send error (non-fatal):', e);
+    }
+
+    return res.status(200).json({ message: 'OTP sent to mobile', exists: !!user, otp: code });
   } catch (err: any) {
-    console.error('Login request OTP error:', err);
+    console.error('Request OTP error:', err);
     return res.status(500).json({ message: 'Internal server error' });
   }
 }
 
-// Common OTP verification (signup or login)
+// Verify OTP for login or signup. If user doesn't exist, require profile fields and create user.
 export async function verifyOtp(req: Request, res: Response) {
   try {
-    const { email, otp } = req.body || {};
-    if (!email || !otp) return res.status(400).json({ message: 'email and otp are required' });
+    const { mobile, otp, firstName, lastName, address } = req.body || {};
+    if (!mobile || !otp) return res.status(400).json({ message: 'Valid Indian mobile is required' });
+    const re = /^[6-9]\d{9}$/;
+    if (!re.test(mobile)) return res.status(400).json({ message: 'Valid Indian mobile is required' });
 
-    const user = await User.findOne({ where: { email } });
-    if (!user) return res.status(404).json({ message: 'User not found' });
-
+    let user = await User.findOne({ where: { mobile } });
     const now = new Date();
-    if (!(user as any).otpCode || (user as any).otpCode !== otp) {
-      return res.status(400).json({ message: 'Invalid OTP' });
-    }
-    if ((user as any).otpExpiresAt && now > new Date((user as any).otpExpiresAt)) {
-      return res.status(400).json({ message: 'OTP expired' });
+
+    // If existing user, validate OTP on record
+    if (user) {
+      if (!user.isActive) return res.status(403).json({ message: 'User is inactive' });
+      if (!(user as any).otpCode || (user as any).otpCode !== otp) {
+        return res.status(400).json({ message: 'Invalid OTP' });
+      }
+      if ((user as any).otpExpiresAt && now > new Date((user as any).otpExpiresAt)) {
+        return res.status(400).json({ message: 'OTP expired' });
+      }
+    } else {
+      // New user path: require profile fields
+      if (!firstName || !lastName || !address) {
+        return res
+          .status(400)
+          .json({ message: 'firstName, lastName, and address are required for new users' });
+      }
+      // Validate OTP using the temporary store
+      const entry = tempOtpStore.get(mobile);
+      if (!entry || entry.code !== otp || now.getTime() > entry.expiresAt) {
+        return res.status(400).json({ message: 'Invalid or expired OTP' });
+      }
+      tempOtpStore.delete(mobile);
+      user = await User.create({
+        mobile,
+        firstName,
+        lastName,
+        address,
+        role: UserRole.CUSTOMER,
+        isVerified: true,
+      } as any);
     }
 
-    (user as any).otpCode = null;
-    (user as any).otpExpiresAt = null;
-    (user as any).isVerified = true;
-    await user.save();
+    // Clear OTP for existing user and mark verified
+    if (user) {
+      (user as any).otpCode = null;
+      (user as any).otpExpiresAt = null;
+      (user as any).isVerified = true;
+      await (user as any).save?.();
+    }
 
-    const token = signToken({ id: user.id, role: user.role });
-    return res.status(200).json({ user: user.toJSON(), token });
+    const token = signToken({ id: (user as any).id, role: (user as any).role });
+    return res.status(200).json({ user: (user as any).toJSON?.() || user, token });
   } catch (err: any) {
     console.error('Verify OTP error:', err);
     return res.status(500).json({ message: 'Internal server error' });
   }
 }
+
+// Common OTP verification (signup or login)
+ // me, promoteUser remain similar but switch any email-based lookup to mobile where applicable
 
 export async function me(req: Request & { user?: any }, res: Response) {
   try {
@@ -118,9 +134,9 @@ export async function me(req: Request & { user?: any }, res: Response) {
 }
 
 // Admin-only: promote/demote a user's role
-export async function promoteUser(req: Request, res: Response) {
+ export async function promoteUser(req: Request, res: Response) {
   try {
-    const { userId, email, role } = req.body || {};
+    const { userId, mobile, role } = req.body || {};
     const allowed = Object.values(UserRole);
     if (!role || !allowed.includes(role)) {
       return res.status(400).json({ message: `role must be one of: ${allowed.join(', ')}` });
@@ -128,8 +144,8 @@ export async function promoteUser(req: Request, res: Response) {
 
     let user: User | null = null;
     if (userId) user = await User.findByPk(userId);
-    else if (email) user = await User.findOne({ where: { email } });
-    else return res.status(400).json({ message: 'userId or email is required' });
+    else if (mobile) user = await User.findOne({ where: { mobile } });
+    else return res.status(400).json({ message: 'userId or mobile is required' });
 
     if (!user) return res.status(404).json({ message: 'User not found' });
 

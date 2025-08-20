@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/context/AuthContext'
 
@@ -39,10 +40,10 @@ const TechnicianDashboard: React.FC = () => {
   const [repairs, setRepairs] = useState<RepairOrderLite[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<'pending' | 'in_progress' | 'completed'>('pending')
+  const [sp, setSp] = useSearchParams()
+  const initialTab = (sp.get('tab') as 'pending'|'in_progress'|'completed') || 'pending'
+  const [tab, setTab] = useState<'pending' | 'in_progress' | 'completed'>(initialTab)
   const [busyId, setBusyId] = useState<string | null>(null)
-  const [attMap, setAttMap] = useState<Record<string, Array<{ id: string; url: string; originalName: string }>>>({})
-  const [attIdx, setAttIdx] = useState<Record<string, number>>({})
 
   // Estimate form state per row
   const [estimateForm, setEstimateForm] = useState<Record<string, { amount: string; serviceCharge: string; timeRequired: string }>>({})
@@ -65,34 +66,27 @@ const TechnicianDashboard: React.FC = () => {
     load()
   }, [])
 
-  // Load attachments for currently visible (assigned to me) repairs
+  // Reload data when tab changes so navigating between tabs always fetches latest
   useEffect(() => {
-    let mounted = true
-    async function loadAttachments(ids: string[]) {
-      try {
-        const results = await Promise.all(
-          ids.map(async (id) => {
-            try {
-              const { data } = await api.get(`/repairs/${id}/attachments`)
-              return { id, atts: data.attachments || [] }
-            } catch {
-              return { id, atts: [] as any[] }
-            }
-          })
-        )
-        if (!mounted) return
-        setAttMap((prev) => {
-          const next = { ...prev }
-          for (const r of results) next[r.id] = r.atts
-          return next
-        })
-      } catch {}
-    }
-    const techId = user?.id
-    const ids = repairs.filter(r => r.technicianId === techId).map(r => r.id)
-    if (ids.length) loadAttachments(ids)
-    return () => { mounted = false }
-  }, [repairs, user?.id])
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab])
+
+  // sync tab with URL
+  useEffect(() => {
+    const current = (sp.get('tab') as any) || 'pending'
+    if (current !== tab) setTab(current)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sp])
+
+  const setTabUrl = (t: 'pending'|'in_progress'|'completed') => {
+    const next = new URLSearchParams(sp)
+    next.set('tab', t)
+    setSp(next, { replace: true })
+    setTab(t)
+  }
+
+  
 
   const myRepairs = useMemo(() => {
     const techId = user?.id
@@ -166,96 +160,122 @@ const TechnicianDashboard: React.FC = () => {
     } finally { setBusyId(null) }
   }
 
+  // derived stats
+  const counts = useMemo(() => ({
+    total: myRepairs.length,
+    pending: myRepairs.filter(r=>r.status==='pending').length,
+    in_progress: myRepairs.filter(r=>r.status==='in_progress').length,
+    completed: myRepairs.filter(r=>r.status==='completed').length,
+    delivered: myRepairs.filter(r=>r.status==='delivered').length,
+  }), [myRepairs])
+
   return (
-    <div className="space-y-5">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-xl font-semibold">Technician Dashboard</h1>
-        <div className="flex items-center gap-2">
-          <button className={`px-3 py-1.5 rounded border ${tab==='pending'?'bg-white':'bg-slate-50'}`} onClick={()=>setTab('pending')}>Pending</button>
-          <button className={`px-3 py-1.5 rounded border ${tab==='in_progress'?'bg-white':'bg-slate-50'}`} onClick={()=>setTab('in_progress')}>In Progress</button>
-          <button className={`px-3 py-1.5 rounded border ${tab==='completed'?'bg-white':'bg-slate-50'}`} onClick={()=>setTab('completed')}>Completed</button>
+    <div className="space-y-5 text-white">
+      {/* Greeting and actions */}
+      <header className="rounded-xl border border-white/10 bg-[#0f1218]/60 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-xl font-semibold">Hi, {user?.firstName} {user?.lastName}</h1>
+            <p className="text-sm text-slate-300">Track your assigned repairs and manage jobs.</p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap justify-start sm:justify-end">
+            {(['pending','in_progress','completed'] as const)
+              .filter(t => t !== tab)
+              .map(t => (
+                <button key={t}
+                  onClick={()=>setTabUrl(t)}
+                  className={`btn btn-outline`}
+                >{t === 'in_progress' ? 'In Progress' : t.charAt(0).toUpperCase()+t.slice(1)}</button>
+              ))}
+          </div>
         </div>
       </header>
 
+      {/* Overview cards */}
+      <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {[
+          { label: 'Completed', value: counts.completed },
+          { label: 'Delivered', value: counts.delivered },
+          { label: 'Pending', value: counts.pending },
+          { label: 'In Progress', value: counts.in_progress },
+          { label: 'Total', value: counts.total },
+        ].map(c => (
+          <div key={c.label} className="rounded-lg border border-white/10 bg-[#12151d] p-3">
+            <div className="text-sm text-slate-300">{c.label}</div>
+            <div className="mt-1 text-2xl font-semibold">{c.value}</div>
+          </div>
+        ))}
+      </section>
+
       {loading ? (
-        <div className="py-10 text-center text-slate-600">Loading jobs...</div>
+        <div className="py-10 text-center text-slate-300">Loading jobs...</div>
       ) : error ? (
-        <div className="py-3 text-red-600">{error}</div>
+        <div className="py-3 text-rose-400">{error}</div>
       ) : (
-        <div className="overflow-x-auto bg-white border rounded">
+        <div className="overflow-x-auto rounded-xl border border-white/10 bg-[#12151d]">
           <table className="min-w-full text-sm">
             <thead>
-              <tr className="text-left text-slate-600">
+              <tr className="text-left text-slate-300 border-b border-white/10">
                 <th className="py-2 px-3">Ticket</th>
                 <th className="py-2 px-3">Device</th>
                 <th className="py-2 px-3">Issue</th>
                 <th className="py-2 px-3">Status</th>
                 <th className="py-2 px-3">Estimate</th>
-                <th className="py-2 px-3">Attachments</th>
                 <th className="py-2 px-3">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map(r => (
-                <tr key={r.id} className="border-t align-top">
+                <tr key={r.id} className="border-t border-white/10 hover:bg-white/5 align-top">
                   <td className="py-2 px-3 font-medium">{r.ticketNumber || r.id.slice(0,8)}</td>
                   <td className="py-2 px-3">{[r.brand, r.model].filter(Boolean).join(' ') || r.deviceType || '-'}</td>
                   <td className="py-2 px-3 max-w-[300px] truncate" title={r.issueDescription || ''}>{r.issueDescription || '-'}</td>
                   <td className="py-2 px-3"><span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${statusBadge[r.status]||'bg-slate-100 text-slate-700'}`}>{r.status}</span></td>
                   <td className="py-2 px-3">{fmtInr(r.estimatedCost)}</td>
+                  
                   <td className="py-2 px-3">
-                    {attMap[r.id]?.length ? (
-                      <div className="relative w-28 h-20">
-                        <a href={attMap[r.id][(attIdx[r.id] ?? 0) % attMap[r.id].length].url} target="_blank" rel="noreferrer">
-                          <img
-                            src={attMap[r.id][(attIdx[r.id] ?? 0) % attMap[r.id].length].url}
-                            alt={attMap[r.id][(attIdx[r.id] ?? 0) % attMap[r.id].length].originalName}
-                            className="w-28 h-20 object-cover rounded border bg-slate-50"
-                          />
-                        </a>
-                        {attMap[r.id].length > 1 && (
-                          <>
-                            <button
-                              className="absolute left-1 top-1/2 -translate-y-1/2 rounded bg-white/80 px-1 text-xs shadow"
-                              onClick={() => setAttIdx(prev => ({ ...prev, [r.id]: ((prev[r.id] ?? 0) - 1 + attMap[r.id].length) % attMap[r.id].length }))}
-                              aria-label="Prev"
-                            >‹</button>
-                            <button
-                              className="absolute right-1 top-1/2 -translate-y-1/2 rounded bg-white/80 px-1 text-xs shadow"
-                              onClick={() => setAttIdx(prev => ({ ...prev, [r.id]: ((prev[r.id] ?? 0) + 1) % attMap[r.id].length }))}
-                              aria-label="Next"
-                            >›</button>
-                          </>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-slate-400">-</span>
-                    )}
-                  </td>
-                  <td className="py-2 px-3 space-y-2">
                     {tab === 'pending' && (
-                      <div className="flex gap-2">
-                        <button disabled={busyId===r.id} className="btn" onClick={()=>acceptJob(r.id)}>{busyId===r.id?'...':'Accept'}</button>
-                        <button disabled={busyId===r.id} className="btn-outline" onClick={()=>rejectJob(r.id)}>{busyId===r.id?'...':'Reject'}</button>
+                      <div className="flex items-center gap-2 whitespace-nowrap">
+                        <button disabled={busyId===r.id} className="btn shrink-0" onClick={()=>acceptJob(r.id)}>{busyId===r.id?'...':'Accept'}</button>
+                        <button disabled={busyId===r.id} className="btn-outline shrink-0" onClick={()=>rejectJob(r.id)}>{busyId===r.id?'...':'Reject'}</button>
                       </div>
                     )}
 
                     {tab === 'in_progress' && (
-                      <div className="space-y-2">
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                          <input className="input" placeholder="Amount" type="number" value={estimateForm[r.id]?.amount ?? ''} onChange={e=>setEstimateForm(prev=>({ ...prev, [r.id]: { ...(prev[r.id]||{amount:'',serviceCharge:'',timeRequired:''}), amount: e.target.value } }))} />
-                          <input className="input" placeholder="Service Charge" type="number" value={estimateForm[r.id]?.serviceCharge ?? ''} onChange={e=>setEstimateForm(prev=>({ ...prev, [r.id]: { ...(prev[r.id]||{amount:'',serviceCharge:'',timeRequired:''}), serviceCharge: e.target.value } }))} />
-                          <input className="input" placeholder="Time Required (e.g., 2 days)" value={estimateForm[r.id]?.timeRequired ?? ''} onChange={e=>setEstimateForm(prev=>({ ...prev, [r.id]: { ...(prev[r.id]||{amount:'',serviceCharge:'',timeRequired:''}), timeRequired: e.target.value } }))} />
-                        </div>
-                        <div className="flex gap-2">
-                          <button disabled={busyId===r.id} className="btn" onClick={()=>saveEstimate(r.id)}>{busyId===r.id?'Saving...':'Save Estimate'}</button>
-                          <button disabled={busyId===r.id} className="btn-outline" onClick={()=>markCompleted(r.id)}>{busyId===r.id?'...':'Mark Completed'}</button>
-                        </div>
+                      <div className="flex items-center gap-2 whitespace-nowrap">
+                        <input
+                          className="input inline-block w-auto shrink-0"
+                          style={{ width: 'auto' }}
+                          size={8}
+                          placeholder="Amount"
+                          type="number"
+                          value={estimateForm[r.id]?.amount ?? ''}
+                          onChange={e=>setEstimateForm(prev=>({ ...prev, [r.id]: { ...(prev[r.id]||{amount:'',serviceCharge:'',timeRequired:''}), amount: e.target.value } }))}
+                        />
+                        <input
+                          className="input inline-block w-auto shrink-0"
+                          style={{ width: 'auto' }}
+                          size={12}
+                          placeholder="Service Charge"
+                          type="number"
+                          value={estimateForm[r.id]?.serviceCharge ?? ''}
+                          onChange={e=>setEstimateForm(prev=>({ ...prev, [r.id]: { ...(prev[r.id]||{amount:'',serviceCharge:'',timeRequired:''}), serviceCharge: e.target.value } }))}
+                        />
+                        <input
+                          className="input inline-block w-auto shrink-0"
+                          style={{ width: 'auto' }}
+                          size={24}
+                          placeholder="Time Required (e.g., 2 days)"
+                          value={estimateForm[r.id]?.timeRequired ?? ''}
+                          onChange={e=>setEstimateForm(prev=>({ ...prev, [r.id]: { ...(prev[r.id]||{amount:'',serviceCharge:'',timeRequired:''}), timeRequired: e.target.value } }))}
+                        />
+                        <button disabled={busyId===r.id} className="btn shrink-0" onClick={()=>saveEstimate(r.id)}>{busyId===r.id?'Saving...':'Save Estimate'}</button>
+                        <button disabled={busyId===r.id} className="btn-outline shrink-0" onClick={()=>markCompleted(r.id)}>{busyId===r.id?'...':'Mark Completed'}</button>
                       </div>
                     )}
 
                     {tab === 'completed' && (
-                      <span className="text-slate-500">Updated: {new Date(r.updatedAt).toLocaleDateString()}</span>
+                      <span className="text-slate-400">Updated: {new Date(r.updatedAt).toLocaleDateString()}</span>
                     )}
                   </td>
                 </tr>

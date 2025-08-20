@@ -6,7 +6,7 @@ import User, { UserRole } from '../models/User';
 export async function listAllCustomers(_req: AuthRequest, res: Response) {
   try {
     const customers = await Customer.findAll();
-    // Attach minimal user info for admin table display (name + email)
+    // Attach minimal user info for admin table display (name + mobile)
     const userIds = customers.map((c: any) => c.userId).filter(Boolean);
     const uniqueUserIds = Array.from(new Set(userIds));
     const users = await User.findAll({ where: { id: uniqueUserIds } as any });
@@ -19,8 +19,7 @@ export async function listAllCustomers(_req: AuthRequest, res: Response) {
             id: userMap.get(c.userId)!.id,
             firstName: userMap.get(c.userId)!.firstName,
             lastName: userMap.get(c.userId)!.lastName,
-            email: userMap.get(c.userId)!.email,
-            phone: userMap.get(c.userId)!.phone,
+            phone: userMap.get(c.userId)!.mobile,
             isActive: userMap.get(c.userId)!.isActive,
           }
         : undefined,
@@ -50,15 +49,13 @@ export async function adminGetCustomer(req: AuthRequest, res: Response) {
 // Admin: create a customer (creates User + Customer)
 export async function adminCreateCustomer(req: AuthRequest, res: Response) {
   try {
-    const { email, password, firstName, lastName, phone, profile } = req.body || {};
-    if (!email || !firstName || !lastName) {
-      return res.status(400).json({ message: 'email, firstName, lastName are required' });
+    const { mobile, firstName, lastName, address, profile } = req.body || {};
+    if (!mobile || !firstName || !lastName) {
+      return res.status(400).json({ message: 'mobile, firstName, lastName are required' });
     }
-    const exists = await User.findOne({ where: { email } });
-    if (exists) return res.status(409).json({ message: 'Email already registered' });
-    const payload: any = { email, firstName, lastName, phone, role: UserRole.CUSTOMER };
-    if (password) payload.password = password;
-    const user = await User.create(payload);
+    const exists = await User.findOne({ where: { mobile } });
+    if (exists) return res.status(409).json({ message: 'Mobile already registered' });
+    const user = await User.create({ mobile, firstName, lastName, address, role: UserRole.CUSTOMER, isVerified: true } as any);
     const customer = await Customer.create({ userId: user.id, ...(profile || {}) });
     return res.status(201).json({ user: user.toJSON(), customer });
   } catch (err) {
@@ -75,12 +72,13 @@ export async function adminUpdateCustomer(req: AuthRequest, res: Response) {
     if (!customer) return res.status(404).json({ message: 'Customer not found' });
     const user = await User.findByPk((customer as any).userId);
 
-    const { firstName, lastName, phone, email, isActive, profile } = req.body || {};
+    const { firstName, lastName, mobile, address, isActive, profile } = req.body || {};
     if (user) {
       if (firstName != null) (user as any).firstName = firstName;
       if (lastName != null) (user as any).lastName = lastName;
-      if (phone != null) (user as any).phone = phone;
-      if (email != null) (user as any).email = email;
+      // Updating mobile is optional and must be unique; keep simple check here if provided
+      if (mobile != null) (user as any).mobile = mobile;
+      if (address != null) (user as any).address = address;
       if (isActive != null) (user as any).isActive = !!isActive;
       await user.save();
     }

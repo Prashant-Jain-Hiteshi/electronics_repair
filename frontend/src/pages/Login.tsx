@@ -1,16 +1,20 @@
-import React, { useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { useAuth } from '@/context/AuthContext'
-import { api } from '@/api/client'
-import AuthLayout from '@/components/auth/AuthLayout'
+ import React, { useState } from 'react'
+ import { Link, useLocation, useNavigate } from 'react-router-dom'
+ import { useAuth } from '@/context/AuthContext'
+ import { api } from '@/api/client'
+ import AuthLayout from '@/components/auth/AuthLayout'
 
 const Login: React.FC = () => {
-  const { requestLoginOtp, verifyOtp } = useAuth()
+  const { requestOtp, verifyOtp } = useAuth()
   const navigate = useNavigate()
   const location = useLocation() as any
-  const [email, setEmail] = useState('')
+  const [mobile, setMobile] = useState('')
   const [otp, setOtp] = useState('')
-  const [step, setStep] = useState<'email' | 'otp'>('email')
+  const [step, setStep] = useState<'mobile' | 'otp'>('mobile')
+  const [isExisting, setIsExisting] = useState<boolean | null>(null)
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [address, setAddress] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -19,21 +23,34 @@ const Login: React.FC = () => {
     setError(null)
     setLoading(true)
     try {
-      if (step === 'email') {
-        await requestLoginOtp(email)
+      if (step === 'mobile') {
+        // Custom validation: exactly 10 digits
+        if (!/^\d{10}$/.test(mobile)) {
+          setError('Please enter exactly 10 digits')
+          return
+        }
+        const { exists } = await requestOtp(mobile)
+        setIsExisting(exists)
         setStep('otp')
       } else {
-        await verifyOtp(email, otp)
-        // Decide redirect: respect prior intent, else role-based default
-        let redirect = location.state?.from?.pathname as string | undefined
+        await verifyOtp({
+          mobile,
+          otp,
+          ...(isExisting ? {} : { firstName, lastName, address }),
+        })
+        // Decide redirect: force role-based default (ignore prior intent)
         try {
           const { data } = await api.get('/auth/me')
           const role: string | undefined = data?.user?.role
-          if (!redirect) redirect = role === 'admin' ? '/admin' : '/'
+          const redirect = role === 'admin'
+            ? '/admin'
+            : role === 'technician'
+              ? '/technician?tab=pending'
+              : '/'
+          navigate(redirect, { replace: true })
         } catch {
-          if (!redirect) redirect = '/'
+          navigate('/', { replace: true })
         }
-        navigate(redirect!, { replace: true })
       }
     } catch (err: any) {
       setError(err?.response?.data?.message || 'Login failed')
@@ -45,7 +62,7 @@ const Login: React.FC = () => {
   return (
     <AuthLayout
       title="Welcome Back!"
-      subtitle={step === 'email' ? 'Please login to your account.' : 'We sent a 6‑digit code to your email.'}
+      subtitle={step === 'mobile' ? 'Login with your mobile number.' : 'Enter the 6‑digit code we sent via SMS.'}
       rightTitle="Streamline Your Repair Workflow"
       rightSubtitle="Technicians and Admins get real‑time updates and a powerful dashboard"
     >
@@ -54,13 +71,19 @@ const Login: React.FC = () => {
       )}
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="space-y-1">
-          <label className="block text-sm font-medium text-slate-700">Email</label>
+          <label className="block text-sm font-medium text-slate-700">Mobile (India)</label>
           <input
             className="input"
-            placeholder="you@example.com"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            placeholder="9876543210"
+            type="tel"
+            inputMode="numeric"
+            maxLength={10}
+            value={mobile}
+            onChange={(e) => {
+              const digits = e.target.value.replace(/\D/g, '').slice(0, 10)
+              setMobile(digits)
+            }}
+            onBlur={(e) => setMobile(e.target.value.trim())}
             required
             disabled={step==='otp'}
           />
@@ -82,13 +105,45 @@ const Login: React.FC = () => {
           </div>
         )}
 
+        {step === 'otp' && isExisting === false && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-slate-700">First name</label>
+              <input className="input" type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Last name</label>
+              <input className="input" type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-slate-700">Address</label>
+              <input className="input" type="text" value={address} onChange={(e) => setAddress(e.target.value)} required />
+            </div>
+          </div>
+        )}
+
+        {step === 'otp' && (
+          <button
+            type="button"
+            className="btn w-full"
+            onClick={() => {
+              setStep('mobile')
+              setOtp('')
+              setError(null)
+            }}
+            disabled={loading}
+          >
+            Back
+          </button>
+        )}
+
         <button className="btn w-full" disabled={loading}>
-          {loading ? (step==='email' ? 'Sending OTP…' : 'Verifying…') : (step==='email' ? 'Send OTP' : 'Verify & Sign in')}
+          {loading ? (step==='mobile' ? 'Sending OTP…' : 'Verifying…') : (step==='mobile' ? 'Send OTP' : 'Verify & Continue')}
         </button>
       </form>
 
       <p className="text-sm text-slate-600 mt-4 text-center">
-        Don’t have an account? <Link className="link" to="/register">Sign up</Link>
+        New user? Enter your mobile, request OTP, then fill your details on the next step.
       </p>
     </AuthLayout>
   )

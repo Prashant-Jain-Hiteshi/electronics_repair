@@ -15,7 +15,6 @@ type Customer = {
     id: string
     firstName: string
     lastName: string
-    email: string
     phone?: string
     isActive: boolean
   }
@@ -36,7 +35,8 @@ const Customers: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [creating, setCreating] = useState(false)
-  const [form, setForm] = useState({ email: '', password: '', firstName: '', lastName: '', phone: '' })
+  const [form, setForm] = useState({ mobile: '', firstName: '', lastName: '', address: '' })
+  const [formErrors, setFormErrors] = useState<{ firstName?: string; lastName?: string; mobile?: string }>({})
   const [q, setQ] = useState('')
 
   async function load() {
@@ -55,13 +55,26 @@ const Customers: React.FC = () => {
 
   useEffect(() => { load() }, [])
 
+  function validate() {
+    const errs: typeof formErrors = {}
+    if (!form.firstName.trim()) errs.firstName = 'First name is required.'
+    if (!form.lastName.trim()) errs.lastName = 'Last name is required.'
+    const m = form.mobile.trim()
+    if (!m) errs.mobile = 'Mobile number is required.'
+    else if (!/^[6-9]\d{9}$/.test(m)) errs.mobile = 'Enter a valid 10-digit Indian mobile (starts with 6-9).'
+    setFormErrors(errs)
+    return Object.keys(errs).length === 0
+  }
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
+    if (!validate()) return
     setCreating(true)
     setError(null)
     try {
       await api.post('/customers', form)
-      setForm({ email: '', password: '', firstName: '', lastName: '', phone: '' })
+      setForm({ mobile: '', firstName: '', lastName: '', address: '' })
+      setFormErrors({})
       setFormOpen(false)
       await load()
     } catch (e: any) {
@@ -84,30 +97,30 @@ const Customers: React.FC = () => {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 text-white">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Customers</h1>
+        <h1 className="text-xl font-semibold text-white">Customers</h1>
         <button className="btn" onClick={() => setFormOpen(true)}>New Customer</button>
       </div>
-      {error && <div className="text-red-600 text-sm">{error}</div>}
+      {error && <div className="text-red-400 text-sm">{error}</div>}
       {/* Search */}
       <div className="flex items-center justify-between gap-3">
         <input
-          className="border rounded-md p-2 text-sm w-full max-w-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+          className="border  border-[#A48AFB] bg-[#0f1218] text-white placeholder-slate-400 rounded-md p-2 text-sm w-full max-w-xs focus:outline-none focus:ring-2 focus:ring-[#A48AFB] focus:border-[#A48AFB] hover:border-[#A48AFB]/50 transition-colors"
           placeholder="Search customers..."
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
       </div>
       {loading ? (
-        <div>Loading...</div>
+        <div className="text-white">Loading...</div>
       ) : (
-        <div className="overflow-auto border rounded">
-          <table className="min-w-full text-sm">
-            <thead className=" text-slate-600">
+        <div className="overflow-auto border border-white/10 rounded bg-[#12151d]">
+          <table className="min-w-full text-sm text-white">
+            <thead className=" text-slate-300">
               <tr>
                 <th className="text-left p-2">Name</th>
-                <th className="text-left p-2">Email</th>
+                <th className="text-left p-2">Phone</th>
                 <th className="text-left p-2">Actions</th>
               </tr>
             </thead>
@@ -119,7 +132,6 @@ const Customers: React.FC = () => {
                   const hay = [
                     r.user?.firstName,
                     r.user?.lastName,
-                    r.user?.email,
                     r.user?.phone,
                     r.address,
                     r.city,
@@ -132,9 +144,9 @@ const Customers: React.FC = () => {
                   return hay.includes(s)
                 })
                 .map((r) => (
-                <tr key={r.id} className="border-t">
+                <tr key={r.id} className="border-t border-white/10 hover:bg-white/5">
                   <td className="p-2">{r.user ? `${r.user.firstName} ${r.user.lastName}` : '-'}</td>
-                  <td className="p-2">{r.user?.email || '-'}</td>
+                  <td className="p-2">{r.user?.phone || '-'}</td>
                   <td className="p-2">
                     <button className="btn btn-sm" onClick={() => handleDeactivate(r.id)}>Deactivate</button>
                   </td>
@@ -146,33 +158,49 @@ const Customers: React.FC = () => {
       )}
 
       {formOpen && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4" onClick={() => setFormOpen(false)}>
-          <div className="bg-white rounded shadow-lg w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="p-4 border-b font-semibold">Create Customer</div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" onClick={() => setFormOpen(false)}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="relative z-10 w-full max-w-lg rounded-2xl border border-white/10 bg-[#12151d] shadow-xl text-white" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b border-white/10">
+              <h3 className="text-lg font-semibold">Create Customer</h3>
+            </div>
             <form className="p-4 space-y-3" onSubmit={handleCreate}>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-slate-600 mb-1">First Name</label>
-                  <input className="input" value={form.firstName} onChange={(e)=>setForm({...form, firstName: e.target.value})} required />
+                  <label className="block text-xs text-slate-300 mb-1">First Name</label>
+                  <input
+                    className={`input border-white/10 bg-[#0f1218] text-white ${formErrors.firstName ? 'ring-2 ring-red-500 border-red-500' : ''}`}
+                    value={form.firstName}
+                    onChange={(e)=>{ setForm({...form, firstName: e.target.value}); if (formErrors.firstName) setFormErrors(prev=>({ ...prev, firstName: undefined })) }}
+                  />
+                  {formErrors.firstName && <p className="mt-1 text-xs text-red-400">{formErrors.firstName}</p>}
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-600 mb-1">Last Name</label>
-                  <input className="input" value={form.lastName} onChange={(e)=>setForm({...form, lastName: e.target.value})} required />
+                  <label className="block text-xs text-slate-300 mb-1">Last Name</label>
+                  <input
+                    className={`input border-white/10 bg-[#0f1218] text-white ${formErrors.lastName ? 'ring-2 ring-red-500 border-red-500' : ''}`}
+                    value={form.lastName}
+                    onChange={(e)=>{ setForm({...form, lastName: e.target.value}); if (formErrors.lastName) setFormErrors(prev=>({ ...prev, lastName: undefined })) }}
+                  />
+                  {formErrors.lastName && <p className="mt-1 text-xs text-red-400">{formErrors.lastName}</p>}
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-600 mb-1">Email</label>
-                  <input className="input" type="email" value={form.email} onChange={(e)=>setForm({...form, email: e.target.value})} required />
+                  <label className="block text-xs text-slate-300 mb-1">Mobile</label>
+                  <input
+                    className={`input border-white/10 bg-[#0f1218] text-white ${formErrors.mobile ? 'ring-2 ring-red-500 border-red-500' : ''}`}
+                    placeholder="10-digit mobile"
+                    value={form.mobile}
+                    onChange={(e)=>{ setForm({...form, mobile: e.target.value}); if (formErrors.mobile) setFormErrors(prev=>({ ...prev, mobile: undefined })) }}
+                  />
+                  {formErrors.mobile && <p className="mt-1 text-xs text-red-400">{formErrors.mobile}</p>}
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-600 mb-1">Phone</label>
-                  <input className="input" value={form.phone} onChange={(e)=>setForm({...form, phone: e.target.value})} />
+                  <label className="block text-xs text-slate-300 mb-1">Address</label>
+                  <input className="input border-white/10 bg-[#0f1218] text-white" value={form.address} onChange={(e)=>setForm({...form, address: e.target.value})} />
                 </div>
-                <div className="col-span-2">
-                  <label className="block text-xs text-slate-600 mb-1">Password</label>
-                  <input className="input" type="password" value={form.password} onChange={(e)=>setForm({...form, password: e.target.value})} required />
-                </div>
+                {/* <div className="col-span-2 text-xs text-slate-400">Mobile is mandatory. Email/password are not required.</div> */}
               </div>
-              <div className="flex items-center justify-end gap-2 pt-2">
+              <div className="flex items-center justify-end gap-2 border-t border-white/10 mt-2 pt-4">
                 <button type="button" className="btn-outline" onClick={()=>setFormOpen(false)}>Cancel</button>
                 <button className="btn" disabled={creating}>{creating ? 'Creating...' : 'Create'}</button>
               </div>

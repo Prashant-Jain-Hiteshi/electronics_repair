@@ -1,35 +1,28 @@
-import { Router } from 'express';
-import { body } from 'express-validator';
-import { signup, loginRequestOtp, verifyOtp, me, promoteUser, listTechnicians } from '../controllers/auth.controller';
-import { requireAuth, requireRole } from '../middleware/auth';
-import { handleValidation } from '../middleware/validate';
+ import { Router } from 'express';
+ import { body } from 'express-validator';
+ import { requestOtp, verifyOtp, me, promoteUser, listTechnicians } from '../controllers/auth.controller';
+ import { requireAuth, requireRole } from '../middleware/auth';
+ import { handleValidation } from '../middleware/validate';
 
 const router = Router();
 
-// Signup (no password) -> send OTP to email
+// Unified step 1: request OTP by mobile (login or signup)
 router.post(
-  '/signup',
-  [
-    body('email').isEmail().withMessage('Valid email is required'),
-    body('firstName').notEmpty().withMessage('firstName is required'),
-    body('lastName').notEmpty().withMessage('lastName is required'),
-    body('phone').optional().isString(),
-  ],
+  '/request-otp',
+  [body('mobile').matches(/^[6-9]\d{9}$/).withMessage('Valid Indian mobile is required')],
   handleValidation,
-  signup
+  requestOtp
 );
-
-// Login step 1: request OTP
-router.post(
-  '/login/request-otp',
-  [body('email').isEmail()],
-  handleValidation,
-  loginRequestOtp
-);
-// Step 2: verify OTP (also used for signup verification)
+// Unified step 2: verify OTP (if new user, include profile fields)
 router.post(
   '/verify-otp',
-  [body('email').isEmail(), body('otp').isLength({ min: 4 })],
+  [
+    body('mobile').matches(/^[6-9]\d{9}$/),
+    body('otp').isLength({ min: 6, max: 6 }),
+    body('firstName').optional().isString(),
+    body('lastName').optional().isString(),
+    body('address').optional().isString(),
+  ],
   handleValidation,
   verifyOtp
 );
@@ -38,7 +31,7 @@ router.post(
   [
     body('role').isIn(['admin', 'technician', 'customer']),
     body('userId').optional().isString(),
-    body('email').optional().isEmail(),
+    body('mobile').optional().matches(/^[6-9]\d{9}$/),
   ],
   handleValidation,
   requireAuth,

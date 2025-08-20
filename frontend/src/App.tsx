@@ -17,6 +17,7 @@ import AdminRepairDetails from '@/pages/admin/AdminRepairDetails'
 import AdminInventory from '@/pages/admin/Inventory'
 import AdminPayments from '@/pages/admin/Payments'
 import TechnicianDashboard from '@/pages/technician/Dashboard'
+import TechnicianShell from '@/components/technician/TechnicianShell'
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth()
@@ -53,6 +54,7 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
   const [repairs, setRepairs] = useState<any[]>([])
+  const base = (import.meta as any)?.env?.BASE_URL || '/'
 
   // Notifications: treat new pending repairs as notifications. Track read IDs in localStorage.
   function getReadIds(): Set<string> {
@@ -89,37 +91,43 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Customer: Sidebar layout with animated background
   if (user?.role === 'customer') {
     return (
-      <div className="min-h-screen relative overflow-hidden">
-        {/* Animated soft background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-emerald-50 via-emerald-50 to-emerald-100" />
-        <span className="pointer-events-none absolute -top-8 -left-8 h-32 w-32 rounded-full bg-emerald-300/25 blur-2xl anim-float-slow" />
-        <span className="pointer-events-none absolute bottom-0 right-0 h-40 w-40 rounded-full bg-emerald-300/20 blur-2xl anim-float-rev" />
+      <div className="auth-dark min-h-screen relative overflow-hidden">
+        {/* Dark themed background */}
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,#0b0d12_0%,#0f1218_100%)]" />
+        <span className="pointer-events-none absolute -top-8 -left-8 h-32 w-32 rounded-full bg-[#A48AFB]/10 blur-2xl anim-float-slow" />
+        <span className="pointer-events-none absolute bottom-0 right-0 h-40 w-40 rounded-full bg-[#A48AFB]/10 blur-2xl anim-float-rev" />
 
         {/* Mobile/Tablet top bar (sticky, visible < md) */}
-        <div className="md:hidden sticky top-0 z-20 flex items-center justify-between px-3 py-3 bg-white/80 backdrop-blur border-b">
-          <button aria-label="Open menu" className="rounded-md border bg-white/80 backdrop-blur px-3 py-2" onClick={() => setOpen(true)}>☰</button>
-          <Link to={homePath} className="font-semibold text-slate-800">ElectroFix</Link>
+        <div className="md:hidden sticky top-0 z-20 flex items-center justify-between px-3 py-3 bg-[#0b0d12]/80 backdrop-blur border-b border-white/10 text-white">
+          <button aria-label="Open menu" className="rounded-md border border-white/10 bg-white/5 px-3 py-2" onClick={() => setOpen(true)}>☰</button>
+          <Link to={homePath} className="flex items-center gap-2 font-semibold text-white">
+            <img src={`${base}logo.svg`} alt="Electro-Repair" className="h-6 w-auto" />
+            <span>Electro-Repair</span>
+          </Link>
           <span />
         </div>
 
         <div className="relative flex gap-3 p-3 items-stretch h-[calc(100vh-1.5rem)] sm:h-[calc(100vh-1.5rem)] overflow-hidden">
           {/* Sidebar - desktop sticky full height (visible ≥ md) */}
-          <aside className="hidden md:flex w-60 shrink-0 flex-col rounded-2xl border bg-gradient-to-br from-[#d1fae5] via-[#d1fae5]/75 to-[#a7f3d0] backdrop-blur shadow-sm p-4 sticky top-3 h-[calc(100vh-1.5rem)]">
-            <Link to={homePath} className="font-semibold text-slate-800 mb-4">ElectroFix</Link>
+          <aside className="hidden md:flex w-60 shrink-0 flex-col rounded-2xl border border-white/10 bg-[#12151d] backdrop-blur shadow-sm p-4 sticky top-3 h-[calc(100vh-1.5rem)] text-white">
+            <Link to={homePath} className="mb-4 flex items-center gap-2 font-semibold text-white">
+              <img src={`${base}logo.svg`} alt="Electro-Repair" className="h-7 w-auto" />
+              <span>Electro-Repair</span>
+            </Link>
             <nav className="flex flex-col gap-1 text-sm">
-              <Link to={homePath} className={`rounded-lg px-3 py-2 hover:bg-slate-50 ${isActive('/') ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : ''}`}>Dashboard</Link>
-              <Link to="/repairs" className={`rounded-lg px-3 py-2 hover:bg-slate-50 ${isActive('/repairs') ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : ''}`}>My Orders</Link>
-              <Link to="/repairs/new" className={`rounded-lg px-3 py-2 hover:bg-slate-50 ${isActive('/repairs/new') ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : ''}`}>New Order</Link>
+              <Link to={homePath} className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 ${isActive('/') ? 'bg-white/10 border border-white/10' : ''}`}>Dashboard</Link>
+              <Link to="/repairs" className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 ${isActive('/repairs') ? 'bg-white/10 border border-white/10' : ''}`}>My Orders</Link>
+              <Link to="/repairs/new" className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 ${isActive('/repairs/new') ? 'bg-white/10 border border-white/10' : ''}`}>New Order</Link>
             </nav>
-            <div className="mt-auto pt-4 border-t text-xs text-slate-600">
+            <div className="mt-auto pt-4 border-t border-white/10 text-xs text-slate-300">
               <div className="mb-2">{user?.firstName} {user?.lastName}</div>
-              <button onClick={() => setShowLogoutConfirm(true)} className="rounded-md border px-3 py-1.5 hover:bg-slate-50 w-full">Logout</button>
+              <button onClick={() => setShowLogoutConfirm(true)} className="rounded-md border border-white/10 px-3 py-1.5 hover:bg-white/5 w-full text-white">Logout</button>
             </div>
           </aside>
 
           {/* Main (independent scroll) */}
           <main className="flex-1 overflow-y-auto">
-            <div className="rounded-2xl border  backdrop-blur p-4 shadow-sm ">
+            <div className="rounded-2xl border border-white/10 auth-card backdrop-blur p-4 shadow-sm ">
               {children}
             </div>
           </main>
@@ -127,21 +135,24 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
         {/* Mobile drawer sidebar */}
         {open && (
-          <div className="fixed inset-0 z-30 sm:hidden">
-            <div className="absolute inset-0 bg-black/30" onClick={() => setOpen(false)} />
-            <div className="absolute left-0 top-0 h-full w-72 bg-gradient-to-b from-[#d1fae5] via-[#d1fae5]/75 to-[#a7f3d0] shadow-xl p-4 flex flex-col">
+          <div className="fixed inset-0 z-30 md:hidden">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
+            <div className="absolute left-0 top-0 h-full w-72 bg-[#12151d] border-r border-white/10 shadow-xl p-4 flex flex-col text-white">
               <div className="flex items-center justify-between mb-3">
-                <span className="font-semibold text-slate-800">ElectroFix</span>
-                <button aria-label="Close" className="rounded-md border px-2 py-1" onClick={() => setOpen(false)}>✕</button>
+                <span className="font-semibold text-white flex items-center gap-2">
+                  <img src={`${base}logo.svg`} alt="Electro-Repair" className="h-6 w-auto" />
+                  <span>Electro-Repair</span>
+                </span>
+                <button aria-label="Close" className="rounded-md border border-white/10 px-2 py-1 hover:bg-white/5" onClick={() => setOpen(false)}>✕</button>
               </div>
               <nav className="flex flex-col gap-1 text-sm">
-                <Link onClick={() => setOpen(false)} to={homePath} className={`rounded-lg px-3 py-2 hover:bg-slate-50 ${isActive('/') ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : ''}`}>Dashboard</Link>
-                <Link onClick={() => setOpen(false)} to="/repairs" className={`rounded-lg px-3 py-2 hover:bg-slate-50 ${isActive('/repairs') ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : ''}`}>My Orders</Link>
-                <Link onClick={() => setOpen(false)} to="/repairs/new" className={`rounded-lg px-3 py-2 hover:bg-slate-50 ${isActive('/repairs/new') ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : ''}`}>New Order</Link>
+                <Link onClick={() => setOpen(false)} to={homePath} className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 ${isActive('/') ? 'bg-white/10 border border-white/10' : ''}`}>Dashboard</Link>
+                <Link onClick={() => setOpen(false)} to="/repairs" className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 ${isActive('/repairs') ? 'bg-white/10 border border-white/10' : ''}`}>My Orders</Link>
+                <Link onClick={() => setOpen(false)} to="/repairs/new" className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 ${isActive('/repairs/new') ? 'bg-white/10 border border-white/10' : ''}`}>New Order</Link>
               </nav>
-              <div className="mt-auto pt-4 text-xs text-slate-600">
+              <div className="mt-auto pt-4 text-xs text-slate-300">
                 <div className="mb-2">{user?.firstName} {user?.lastName}</div>
-                <button onClick={() => { setOpen(false); logout(); }} className="rounded-md border px-3 py-1.5 hover:bg-slate-50 w-full">Logout</button>
+                <button onClick={() => { setOpen(false); logout(); }} className="rounded-md border border-white/10 px-3 py-1.5 hover:bg-white/5 w-full text-white">Logout</button>
               </div>
             </div>
           </div>
@@ -155,22 +166,22 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           .anim-float-rev { animation: floatYrev 16s ease-in-out infinite; }
         `}</style>
 
-      {/* Logout confirmation modal */}
+      {/* Logout confirmation modal (dark themed) */}
       {showLogoutConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowLogoutConfirm(false)} />
-          <div className="relative z-10 w-[92vw] max-w-sm rounded-xl bg-white shadow-xl border">
-            <div className="px-5 py-4 border-b">
-              <h3 className="text-base font-semibold text-slate-900">Confirm Logout</h3>
-              <p className="mt-1 text-sm text-slate-600">Are you sure you want to logout?</p>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowLogoutConfirm(false)} />
+          <div className="relative z-10 w-[92vw] max-w-sm rounded-xl border border-white/10 bg-[#12151d] text-white shadow-xl">
+            <div className="px-5 py-4 border-b border-white/10">
+              <h3 className="text-base font-semibold text-white">Confirm Logout</h3>
+              <p className="mt-1 text-sm text-slate-300">Are you sure you want to logout?</p>
             </div>
             <div className="px-5 py-4 flex items-center justify-end gap-2">
               <button
-                className="rounded-md border px-3 py-1.5 text-sm hover:bg-slate-50"
+                className="rounded-md border border-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/5"
                 onClick={() => setShowLogoutConfirm(false)}
               >Cancel</button>
               <button
-                className="rounded-md bg-emerald-600 text-white px-3 py-1.5 text-sm hover:bg-emerald-700"
+                className="rounded-md bg-[#A48AFB] text-white px-3 py-1.5 text-sm hover:bg-[#9a80ff]"
                 onClick={() => { setShowLogoutConfirm(false); logout(); }}
               >Logout</button>
             </div>
@@ -191,7 +202,10 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       <header className="sticky top-0 z-30 border-b bg-white/80 backdrop-blur">
         <div className="container flex items-center justify-between py-3">
           <div className="flex items-center gap-6">
-            <Link to={homePath} className="font-semibold text-primary-700">ElectroFix</Link>
+            <Link to={homePath} className="flex items-center gap-2 font-semibold text-primary-700">
+              <img src={`${base}logo.svg`} alt="Electro-Repair" className="h-7 w-auto" />
+              <span className="hidden sm:inline text-slate-800">Electro-Repair</span>
+            </Link>
             <nav className="hidden sm:flex items-center gap-4 text-sm text-slate-700">
               <Link to={homePath} className="hover:text-primary-700">Dashboard</Link>
               {user?.role === 'technician' && (
@@ -323,9 +337,9 @@ const App: React.FC = () => {
         path="/technician"
         element={
           <TechnicianProtectedRoute>
-            <Shell>
+            <TechnicianShell>
               <TechnicianDashboard />
-            </Shell>
+            </TechnicianShell>
           </TechnicianProtectedRoute>
         }
       />
