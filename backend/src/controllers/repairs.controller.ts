@@ -11,6 +11,7 @@ import sequelize from '../config/database';
 import { buildRepairInvoiceHTML, InvoiceTotals } from '../utils/invoice';
 import User, { UserRole } from '../models/User';
 import RepairAttachment from '../models/RepairAttachment';
+import { emitToUser } from '../socket';
 
 // Technician/Admin: list all repair orders
 export async function listAllRepairs(_req: AuthRequest, res: Response) {
@@ -176,7 +177,32 @@ export async function updateRepair(req: AuthRequest, res: Response) {
     const { id } = req.params;
     const repair = await RepairOrder.findByPk(id);
     if (!repair) return res.status(404).json({ message: 'Repair order not found' });
+    const prevStatus = repair.status;
     await repair.update(req.body);
+
+    // If status changed, notify the customer via Socket.IO
+    try {
+      const newStatus = (repair as any).status as RepairStatus;
+      if (prevStatus !== newStatus) {
+        const customer = await Customer.findByPk((repair as any).customerId);
+        const userId = (customer as any)?.userId as string | undefined;
+        if (userId) {
+          const productName = `${(repair as any).deviceType || ''} ${(repair as any).brand || ''} ${(repair as any).model || ''}`.trim();
+          emitToUser(userId, 'notification:new', {
+            kind: 'repair_status',
+            repairId: (repair as any).id,
+            previousStatus: prevStatus,
+            status: newStatus,
+            title: productName || 'Repair update',
+            message: `Status updated to ${newStatus}.`,
+            createdAt: new Date().toISOString(),
+          });
+        }
+      }
+    } catch (notifyErr) {
+      console.error('Failed to emit status change notification:', notifyErr);
+    }
+
     return res.status(200).json({ repair });
   } catch (err) {
     console.error('Update repair error:', err);
@@ -406,6 +432,27 @@ export async function cancelRepair(req: AuthRequest, res: Response) {
 
     repair.status = RepairStatus.CANCELLED;
     await repair.save();
+
+    // Notify the customer about cancellation
+    try {
+      const customer = await Customer.findByPk((repair as any).customerId);
+      const userId = (customer as any)?.userId as string | undefined;
+      if (userId) {
+        const productName = `${(repair as any).deviceType || ''} ${(repair as any).brand || ''} ${(repair as any).model || ''}`.trim();
+        emitToUser(userId, 'notification:new', {
+          kind: 'repair_status',
+          repairId: (repair as any).id,
+          previousStatus: RepairStatus.PENDING,
+          status: RepairStatus.CANCELLED,
+          title: productName || 'Repair cancelled',
+          message: 'Status updated to CANCELLED.',
+          createdAt: new Date().toISOString(),
+        });
+      }
+    } catch (notifyErr) {
+      console.error('Failed to emit cancellation notification:', notifyErr);
+    }
+
     return res.status(200).json({ repair });
   } catch (err) {
     console.error('Cancel repair error:', err);

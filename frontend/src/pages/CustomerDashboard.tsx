@@ -120,7 +120,7 @@ const CustomerDashboard: React.FC = () => {
   }, [stats.byStatus])
 
   return (
-    <div className="auth-dark space-y-6 pb-4 sm:pb-16 md:pb-0">
+    <div className="  space-y-6 pb-10 sm:pb-16 ">
       {/* Hero */}
       <section className="relative overflow-hidden rounded-xl border p-6 auth-card">
         <span className="pointer-events-none absolute -top-6 -left-6 h-20 w-20 rounded-full bg-[#A48AFB]/10 blur-xl anim-float-slow" />
@@ -219,7 +219,7 @@ const CustomerDashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {filtered.slice(0, 4).map((r, idx) => (
+                {filtered.slice(0, 3).map((r, idx) => (
                   <tr key={r.id} className={idx % 2 === 0 ? 'border-t' : 'border-t bg-white/5 hover:bg-white/10'}>
                     <td className="py-2 px-3 font-medium">{r.ticketNumber || r.id.slice(0, 8)}</td>
                     <td className="py-2 px-3">{
@@ -245,11 +245,7 @@ const CustomerDashboard: React.FC = () => {
                 ))}
               </tbody>
             </table>
-            {filtered.length > 4 && (
-              <div className="mt-3 flex justify-end">
-                <Link to="/repairs" className="rounded-md border px-3 py-2 text-sm text-white hover:bg-white/5">View all</Link>
-              </div>
-            )}
+            
           </div>
         )}
       </section>

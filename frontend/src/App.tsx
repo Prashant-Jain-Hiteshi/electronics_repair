@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, Link } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { api } from '@/api/client'
+import { connectSocket, disconnectSocket } from '@/api/socket'
 import Login from '@/pages/Login'
 import Register from '@/pages/Register'
 import CustomerDashboard from '@/pages/CustomerDashboard'
@@ -77,21 +78,104 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [repairs, setRepairs] = useState<any[]>([])
   const base = (import.meta as any)?.env?.BASE_URL || '/'
 
-  // Lock page scroll on mobile for customer panel to prevent header/page from moving
+  // Customer notifications state
+  const [custNotifOpen, setCustNotifOpen] = useState(false)
+  const [custNotifs, setCustNotifs] = useState<any[]>([])
+
+  // Refs for click-outside handling
+  const custBtnDesktopRef = useRef<HTMLButtonElement | null>(null)
+  const custMenuDesktopRef = useRef<HTMLDivElement | null>(null)
+  const custBtnMobileRef = useRef<HTMLButtonElement | null>(null)
+  const custMenuMobileRef = useRef<HTMLDivElement | null>(null)
+  const adminBtnRef = useRef<HTMLButtonElement | null>(null)
+  const adminMenuRef = useRef<HTMLDivElement | null>(null)
+
+  // Local storage helpers (per-user)
+  const userId = (useAuth().user?.id) as string | undefined
+  const storeKey = userId ? `cust_notifs_${userId}` : 'cust_notifs'
+  function loadCustNotifs(): any[] {
+    try { return JSON.parse(localStorage.getItem(storeKey) || '[]') } catch { return [] }
+  }
+  function saveCustNotifs(list: any[]) {
+    localStorage.setItem(storeKey, JSON.stringify(list))
+  }
+  const unreadCount = custNotifs.filter(n => !n.read).length
+
+  // Lock browser scroll for ALL customer pages (header stays, only content scrolls)
   useEffect(() => {
-    const mq = window.matchMedia('(min-width: 768px)') // md breakpoint
-    const apply = () => {
-      if (user?.role === 'customer' && !mq.matches) {
-        document.body.classList.add('no-scroll')
-      } else {
-        document.body.classList.remove('no-scroll')
+    const html = document.documentElement
+    const body = document.body
+    const enable = user?.role === 'customer'
+    if (enable) {
+      html.classList.add('no-scroll')
+      body.classList.add('no-scroll')
+    } else {
+      html.classList.remove('no-scroll')
+      body.classList.remove('no-scroll')
+    }
+    return () => { html.classList.remove('no-scroll'); body.classList.remove('no-scroll') }
+  }, [user?.role])
+
+  // Close popups on click-outside, Escape, and route change
+  useEffect(() => {
+    const handlePointer = (e: MouseEvent | TouchEvent) => {
+      const t = e.target as Node
+      // Customer dropdowns (desktop and mobile)
+      if (custNotifOpen) {
+        const insideCustomer =
+          (!!custMenuDesktopRef.current && custMenuDesktopRef.current.contains(t)) ||
+          (!!custBtnDesktopRef.current && custBtnDesktopRef.current.contains(t)) ||
+          (!!custMenuMobileRef.current && custMenuMobileRef.current.contains(t)) ||
+          (!!custBtnMobileRef.current && custBtnMobileRef.current.contains(t))
+        if (!insideCustomer) setCustNotifOpen(false)
+      }
+      // Admin dropdown
+      if (notifOpen) {
+        const insideAdmin =
+          (!!adminMenuRef.current && adminMenuRef.current.contains(t)) ||
+          (!!adminBtnRef.current && adminBtnRef.current.contains(t))
+        if (!insideAdmin) setNotifOpen(false)
       }
     }
-    apply()
-    mq.addEventListener?.('change', apply)
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setCustNotifOpen(false); setNotifOpen(false) }
+    }
+    document.addEventListener('mousedown', handlePointer)
+    document.addEventListener('touchstart', handlePointer, { passive: true })
+    document.addEventListener('keydown', handleKey)
     return () => {
-      mq.removeEventListener?.('change', apply)
-      document.body.classList.remove('no-scroll')
+      document.removeEventListener('mousedown', handlePointer)
+      document.removeEventListener('touchstart', handlePointer)
+      document.removeEventListener('keydown', handleKey)
+    }
+  }, [custNotifOpen, notifOpen])
+
+  // Close on route change
+  useEffect(() => { setCustNotifOpen(false); setNotifOpen(false) }, [location.pathname])
+
+  // Connect socket for customer, listen for notifications
+  useEffect(() => {
+    if (user?.role !== 'customer') return
+    // initialize from storage
+    setCustNotifs(loadCustNotifs())
+    const token = localStorage.getItem('auth_token') || ''
+    const s = connectSocket(token)
+    const handler = (payload: any) => {
+      const next = [
+        {
+          id: `${payload.repairId}-${payload.createdAt}`,
+          ...payload,
+          read: false,
+        },
+        ...loadCustNotifs(),
+      ].slice(0, 50)
+      saveCustNotifs(next)
+      setCustNotifs(next)
+    }
+    s.on('notification:new', handler)
+    return () => {
+      try { s.off('notification:new', handler) } catch {}
+      disconnectSocket()
     }
   }, [user?.role])
 
@@ -136,6 +220,61 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         <span className="pointer-events-none absolute -top-8 -left-8 h-32 w-32 rounded-full bg-[#A48AFB]/10 blur-2xl anim-float-slow" />
         <span className="pointer-events-none absolute bottom-0 right-0 h-40 w-40 rounded-full bg-[#A48AFB]/10 blur-2xl anim-float-rev" />
 
+        {/* Desktop sticky header (≥ md) */}
+        <div className="hidden md:flex sticky top-0 z-20 items-center justify-between px-4 py-3 bg-[#0b0d12]/80 backdrop-blur border-b border-white/10 text-white">
+          <Link to={homePath} className="flex items-center gap-2 font-semibold text-white">
+            <img src={`${base}logo.svg`} alt="Electro-Repair" className="h-7 w-auto" />
+            <span>Electro-Repair</span>
+          </Link>
+          <div className="relative">
+            <button
+              aria-label="Notifications"
+              className="relative rounded-md border border-white/10 bg-white/5 px-3 py-1.5 hover:bg-white/10"
+              onClick={() => setCustNotifOpen(v => !v)}
+              ref={custBtnDesktopRef}
+            >
+              🔔
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 inline-flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] h-5 min-w-[1.25rem] px-1">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+            {custNotifOpen && (
+              <div ref={custMenuDesktopRef} className="absolute right-0 mt-2 w-80 max-w-[90vw] rounded-lg border border-white/10 bg-[#12151d] text-white shadow-xl z-40">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+                  <div className="font-medium text-sm">Notifications</div>
+                  <button
+                    className="text-xs rounded border border-white/10 px-2 py-1 hover:bg-white/5"
+                    onClick={() => { saveCustNotifs([]); setCustNotifs([]); }}
+                    disabled={custNotifs.length === 0}
+                  >Clear all</button>
+                </div>
+                <div className="max-h-80 overflow-y-auto">
+                  {custNotifs.length === 0 ? (
+                    <div className="p-3 text-xs text-slate-300">No notifications</div>
+                  ) : (
+                    custNotifs.slice(0, 20).map(n => (
+                      <div key={n.id} className="px-3 py-2 border-b border-white/5 text-sm flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="truncate"><span className="font-medium">{n.title || 'Update'}</span> • {n.message}</div>
+                          <div className="text-[11px] text-slate-400 truncate">{new Date(n.createdAt).toLocaleString()}</div>
+                        </div>
+                        <div className="shrink-0 flex items-center gap-2">
+                          <Link to={`/repairs/${n.repairId}`} onClick={() => setCustNotifOpen(false)} className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5 text-white">Open</Link>
+                          {!n.read && (
+                            <button className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5" onClick={() => { const next = custNotifs.map(x => x.id===n.id?{...x, read:true}:x); saveCustNotifs(next); setCustNotifs(next); }}>Mark read</button>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Mobile/Tablet top bar (sticky, visible < md) */}
         <div className="md:hidden sticky top-0 z-20 flex items-center justify-between px-3 py-3 bg-[#0b0d12]/80 backdrop-blur border-b border-white/10 text-white">
           <button aria-label="Open menu" className="rounded-md border border-white/10 bg-white/5 px-3 py-2" onClick={() => setOpen(true)}>☰</button>
@@ -143,7 +282,53 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             <img src={`${base}logo.svg`} alt="Electro-Repair" className="h-6 w-auto" />
             <span>Electro-Repair</span>
           </Link>
-          <span />
+          <div className="relative">
+            <button
+              aria-label="Notifications"
+              className="relative rounded-md border border-white/10 bg-white/5 px-3 py-2"
+              onClick={() => setCustNotifOpen(v => !v)}
+              ref={custBtnMobileRef}
+            >
+              🔔
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 inline-flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] h-5 min-w-[1.25rem] px-1">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+            {custNotifOpen && (
+              <div ref={custMenuMobileRef} className="absolute right-0 mt-2 w-80 max-w-[90vw] rounded-lg border border-white/10 bg-[#12151d] text-white shadow-xl z-40">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+                  <div className="font-medium text-sm">Notifications</div>
+                  <button
+                    className="text-xs rounded border border-white/10 px-2 py-1 hover:bg-white/5"
+                    onClick={() => { const next = custNotifs.map(n => ({...n, read: true})); saveCustNotifs(next); setCustNotifs(next); }}
+                    disabled={unreadCount === 0}
+                  >Mark all read</button>
+                </div>
+                <div className="max-h-80 overflow-y-auto">
+                  {custNotifs.length === 0 ? (
+                    <div className="p-3 text-xs text-slate-300">No notifications</div>
+                  ) : (
+                    custNotifs.slice(0, 20).map(n => (
+                      <div key={n.id} className="px-3 py-2 border-b border-white/5 text-sm flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="truncate"><span className="font-medium">{n.title || 'Update'}</span> • {n.message}</div>
+                          <div className="text-[11px] text-slate-400 truncate">{new Date(n.createdAt).toLocaleString()}</div>
+                        </div>
+                        <div className="shrink-0 flex items-center gap-2">
+                          <Link to={`/repairs/${n.repairId}`} onClick={() => setCustNotifOpen(false)} className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5 text-white">Open</Link>
+                          {!n.read && (
+                            <button className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5" onClick={() => { const next = custNotifs.map(x => x.id===n.id?{...x, read:true}:x); saveCustNotifs(next); setCustNotifs(next); }}>Mark read</button>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* On mobile, subtract the top bar (~3.5rem) so only the main scrolls */}
@@ -222,6 +407,8 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           @keyframes floatYrev { 0%,100% { transform: translateY(0) } 50% { transform: translateY(8px) } }
           .anim-float-slow { animation: floatY 14s ease-in-out infinite; }
           .anim-float-rev { animation: floatYrev 16s ease-in-out infinite; }
+          /* Prevent browser window from scrolling in customer view */
+          .no-scroll { overflow: hidden !important; }
         `}</style>
 
       {/* Logout confirmation modal (dark themed) */}
@@ -281,6 +468,7 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                   aria-label="Notifications"
                   className="relative rounded-md border px-3 py-1.5 hover:bg-slate-50"
                   onClick={() => setNotifOpen(v => !v)}
+                  ref={adminBtnRef}
                 >
                   🔔
                   {unread.length > 0 && (
@@ -290,7 +478,7 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                   )}
                 </button>
                 {notifOpen && (
-                  <div className="absolute right-0 mt-2 w-80 max-w-[90vw] rounded-lg border bg-white shadow-lg z-40">
+                  <div ref={adminMenuRef} className="absolute right-0 mt-2 w-80 max-w-[90vw] rounded-lg border bg-white shadow-lg z-40">
                     <div className="flex items-center justify-between px-3 py-2 border-b">
                       <div className="font-medium text-sm">Notifications</div>
                       <button

@@ -4,6 +4,8 @@ dotenv.config();
 import app from './app';
 import sequelize from './config/database';
 import './models'; // initialize models and associations
+import { createServer } from 'http';
+import { initSocket } from './socket';
 
 const PORT = parseInt(process.env.PORT || '4000', 10);
 
@@ -18,7 +20,10 @@ async function start() {
     await sequelize.sync({ alter });
     console.log('All models were synchronized successfully.');
 
-    app.listen(PORT, () => {
+    const server = createServer(app);
+    initSocket(server);
+
+    server.listen(PORT, () => {
       console.log(`Server is running on http://localhost:${PORT}`);
     });
   } catch (error) {
