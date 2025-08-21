@@ -21,6 +21,8 @@ import {
 import { handleValidation } from '../middleware/validate';
 import { listAttachments, uploadAttachments, deleteAttachment } from '../controllers/attachments.controller';
 import { cancelRepair } from '../controllers/repairs.controller';
+import type { Request } from 'express';
+import type { FileFilterCallback } from 'multer';
 
 const router = Router();
 // Simple upload config for createRepair; stores files under uploads/repairs
@@ -28,13 +30,13 @@ const upload = multer({ dest: 'uploads/repairs/' });
 
 // Attachments upload config: save to uploads/repairs/:id preserving extension
 const storage = multer.diskStorage({
-  destination: (req, _file, cb) => {
+  destination: (req: Request, _file: Express.Multer.File, cb: (error: Error | null, destination: string) => void) => {
     const id = (req.params as any).id || 'misc';
     const dir = path.join('uploads', 'repairs', id);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);
   },
-  filename: (_req, file, cb) => {
+  filename: (_req: Request, file: Express.Multer.File, cb: (error: Error | null, filename: string) => void) => {
     let ext = path.extname(file.originalname) || '';
     if (!ext) {
       if (/jpeg|jpg/i.test(file.mimetype)) ext = '.jpg';
@@ -45,7 +47,7 @@ const storage = multer.diskStorage({
     cb(null, name);
   },
 });
-const fileFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
+const fileFilter: (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => void = (_req, file, cb) => {
   const ok = /^(image\/(jpeg|jpg|png|webp))$/i.test(file.mimetype);
   if (!ok) return cb(new Error('Only JPG, PNG, WEBP images are allowed'));
   cb(null, true);
