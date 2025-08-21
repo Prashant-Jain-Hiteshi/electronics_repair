@@ -19,6 +19,27 @@ import AdminPayments from '@/pages/admin/Payments'
 import TechnicianDashboard from '@/pages/technician/Dashboard'
 import TechnicianShell from '@/components/technician/TechnicianShell'
 
+// Small inline icons for sidebar
+const IconDashboard = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <rect x="3" y="3" width="7" height="7" rx="1.5" />
+    <rect x="14" y="3" width="7" height="7" rx="1.5" />
+    <rect x="3" y="14" width="7" height="7" rx="1.5" />
+    <rect x="14" y="14" width="7" height="7" rx="1.5" />
+  </svg>
+)
+const IconClipboard = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <rect x="4" y="4" width="16" height="18" rx="2" />
+    <path d="M9 2h6v4H9z" />
+  </svg>
+)
+const IconPlus = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M12 5v14M5 12h14" />
+  </svg>
+)
+
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth()
   const location = useLocation()
@@ -56,6 +77,24 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [repairs, setRepairs] = useState<any[]>([])
   const base = (import.meta as any)?.env?.BASE_URL || '/'
 
+  // Lock page scroll on mobile for customer panel to prevent header/page from moving
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)') // md breakpoint
+    const apply = () => {
+      if (user?.role === 'customer' && !mq.matches) {
+        document.body.classList.add('no-scroll')
+      } else {
+        document.body.classList.remove('no-scroll')
+      }
+    }
+    apply()
+    mq.addEventListener?.('change', apply)
+    return () => {
+      mq.removeEventListener?.('change', apply)
+      document.body.classList.remove('no-scroll')
+    }
+  }, [user?.role])
+
   // Notifications: treat new pending repairs as notifications. Track read IDs in localStorage.
   function getReadIds(): Set<string> {
     try { return new Set(JSON.parse(localStorage.getItem('admin_read_notifications') || '[]')) } catch { return new Set() }
@@ -91,7 +130,7 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Customer: Sidebar layout with animated background
   if (user?.role === 'customer') {
     return (
-      <div className="auth-dark min-h-screen relative overflow-hidden">
+      <div className="auth-dark fixed inset-0 md:relative md:min-h-screen md:overflow-hidden">
         {/* Dark themed background */}
         <div className="absolute inset-0 bg-[linear-gradient(180deg,#0b0d12_0%,#0f1218_100%)]" />
         <span className="pointer-events-none absolute -top-8 -left-8 h-32 w-32 rounded-full bg-[#A48AFB]/10 blur-2xl anim-float-slow" />
@@ -107,7 +146,8 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           <span />
         </div>
 
-        <div className="relative flex gap-3 p-3 items-stretch h-[calc(100vh-1.5rem)] sm:h-[calc(100vh-1.5rem)] overflow-hidden">
+        {/* On mobile, subtract the top bar (~3.5rem) so only the main scrolls */}
+        <div className="relative flex gap-3 p-3 items-stretch h-[calc(100vh-3.5rem)] sm:h-[calc(100vh-1.5rem)] overflow-hidden">
           {/* Sidebar - desktop sticky full height (visible ≥ md) */}
           <aside className="hidden md:flex w-60 shrink-0 flex-col rounded-2xl border border-white/10 bg-[#12151d] backdrop-blur shadow-sm p-4 sticky top-3 h-[calc(100vh-1.5rem)] text-white">
             <Link to={homePath} className="mb-4 flex items-center gap-2 font-semibold text-white">
@@ -115,9 +155,18 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
               <span>Electro-Repair</span>
             </Link>
             <nav className="flex flex-col gap-1 text-sm">
-              <Link to={homePath} className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 ${isActive('/') ? 'bg-white/10 border border-white/10' : ''}`}>Dashboard</Link>
-              <Link to="/repairs" className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 ${isActive('/repairs') ? 'bg-white/10 border border-white/10' : ''}`}>My Orders</Link>
-              <Link to="/repairs/new" className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 ${isActive('/repairs/new') ? 'bg-white/10 border border-white/10' : ''}`}>New Order</Link>
+              <Link to={homePath} className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 flex items-center gap-2 ${isActive('/') ? 'bg-white/10 border border-white/10' : ''}`}>
+                <span className="text-slate-300"><IconDashboard /></span>
+                <span>Dashboard</span>
+              </Link>
+              <Link to="/repairs" className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 flex items-center gap-2 ${isActive('/repairs') ? 'bg-white/10 border border-white/10' : ''}`}>
+                <span className="text-slate-300"><IconClipboard /></span>
+                <span>My Orders</span>
+              </Link>
+              <Link to="/repairs/new" className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 flex items-center gap-2 ${isActive('/repairs/new') ? 'bg-white/10 border border-white/10' : ''}`}>
+                <span className="text-slate-300"><IconPlus /></span>
+                <span>New Order</span>
+              </Link>
             </nav>
             <div className="mt-auto pt-4 border-t border-white/10 text-xs text-slate-300">
               <div className="mb-2">{user?.firstName} {user?.lastName}</div>
@@ -126,7 +175,7 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           </aside>
 
           {/* Main (independent scroll) */}
-          <main className="flex-1 overflow-y-auto">
+          <main className="customer-main flex-1 overflow-y-auto">
             <div className="rounded-2xl border border-white/10 auth-card backdrop-blur p-4 shadow-sm ">
               {children}
             </div>
@@ -146,9 +195,18 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                 <button aria-label="Close" className="rounded-md border border-white/10 px-2 py-1 hover:bg-white/5" onClick={() => setOpen(false)}>✕</button>
               </div>
               <nav className="flex flex-col gap-1 text-sm">
-                <Link onClick={() => setOpen(false)} to={homePath} className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 ${isActive('/') ? 'bg-white/10 border border-white/10' : ''}`}>Dashboard</Link>
-                <Link onClick={() => setOpen(false)} to="/repairs" className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 ${isActive('/repairs') ? 'bg-white/10 border border-white/10' : ''}`}>My Orders</Link>
-                <Link onClick={() => setOpen(false)} to="/repairs/new" className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 ${isActive('/repairs/new') ? 'bg-white/10 border border-white/10' : ''}`}>New Order</Link>
+                <Link onClick={() => setOpen(false)} to={homePath} className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 flex items-center gap-2 ${isActive('/') ? 'bg-white/10 border border-white/10' : ''}`}>
+                  <span className="text-slate-300"><IconDashboard /></span>
+                  <span>Dashboard</span>
+                </Link>
+                <Link onClick={() => setOpen(false)} to="/repairs" className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 flex items-center gap-2 ${isActive('/repairs') ? 'bg-white/10 border border-white/10' : ''}`}>
+                  <span className="text-slate-300"><IconClipboard /></span>
+                  <span>My Orders</span>
+                </Link>
+                <Link onClick={() => setOpen(false)} to="/repairs/new" className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 flex items-center gap-2 ${isActive('/repairs/new') ? 'bg-white/10 border border-white/10' : ''}`}>
+                  <span className="text-slate-300"><IconPlus /></span>
+                  <span>New Order</span>
+                </Link>
               </nav>
               <div className="mt-auto pt-4 text-xs text-slate-300">
                 <div className="mb-2">{user?.firstName} {user?.lastName}</div>

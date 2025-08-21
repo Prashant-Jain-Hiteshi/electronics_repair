@@ -2,13 +2,55 @@ import React, { useState } from 'react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 
+// Small inline icons to match sample style
+const IconDashboard = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <rect x="3" y="3" width="7" height="7" rx="1.5" />
+    <rect x="14" y="3" width="7" height="7" rx="1.5" />
+    <rect x="3" y="14" width="7" height="7" rx="1.5" />
+    <rect x="14" y="14" width="7" height="7" rx="1.5" />
+  </svg>
+)
+const IconUsers = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <path d="M22 21v-2a3 3 0 0 0-2-2.82" />
+    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+  </svg>
+)
+const IconWrench = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M14.7 6.3a4.5 4.5 0 0 1-6 6L3 18v3h3l5.7-5.7a4.5 4.5 0 0 1 3-9z" />
+  </svg>
+)
+const IconClipboard = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <rect x="4" y="4" width="16" height="18" rx="2" />
+    <path d="M9 2h6v4H9z" />
+  </svg>
+)
+const IconBoxes = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M21 16V8l-9-5-9 5v8l9 5 9-5z" />
+    <path d="M3.3 7.3L12 12l8.7-4.7" />
+    <path d="M12 22V12" />
+  </svg>
+)
+const IconCard = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <rect x="2" y="4" width="20" height="16" rx="2" />
+    <path d="M2 10h20" />
+  </svg>
+)
+
 const navItems = [
-  { to: '/admin', label: 'Overview' },
-  { to: '/admin/customers', label: 'Customers' },
-  { to: '/admin/technicians', label: 'Technicians' },
-  { to: '/admin/repairs', label: 'Repairs' },
-  { to: '/admin/inventory', label: 'Inventory' },
-  { to: '/admin/payments', label: 'Payments' },
+  { to: '/admin', label: 'Overview', Icon: IconDashboard },
+  { to: '/admin/customers', label: 'Customers', Icon: IconUsers },
+  { to: '/admin/technicians', label: 'Technicians', Icon: IconWrench },
+  { to: '/admin/repairs', label: 'Repairs', Icon: IconClipboard },
+  { to: '/admin/inventory', label: 'Inventory', Icon: IconBoxes },
+  { to: '/admin/payments', label: 'Payments', Icon: IconCard },
 ]
 
 const AdminShell: React.FC = () => {
@@ -20,7 +62,7 @@ const AdminShell: React.FC = () => {
   const base = (import.meta as any)?.env?.BASE_URL || '/'
 
   return (
-    <div className="auth-dark min-h-screen relative overflow-hidden">
+    <div className="auth-dark fixed inset-0 md:relative md:min-h-screen md:overflow-hidden">
       {/* Dark background to match theme */}
       <div className="absolute inset-0 bg-[linear-gradient(180deg,#0b0d12_0%,#0f1218_100%)]" />
       <span className="pointer-events-none absolute -top-8 -left-8 h-32 w-32 rounded-full bg-[#A48AFB]/10 blur-2xl anim-float-slow" />
@@ -36,7 +78,7 @@ const AdminShell: React.FC = () => {
         <span className="text-xs px-2 py-1 rounded border border-white/10">Admin</span>
       </div>
 
-      <div className="relative mt-14 md:mt-0 flex gap-3 p-3 items-stretch h-[calc(100vh-1.5rem)] sm:h-[calc(100vh-1.5rem)] overflow-hidden">
+      <div className="relative mt-14 md:mt-0 flex gap-3 p-3 items-stretch h-[calc(100vh-3.5rem)] sm:h-[calc(100vh-1.5rem)] overflow-hidden">
         {/* Sidebar - desktop sticky full height (visible ≥ md) */}
         <aside className="hidden md:flex w-60 shrink-0 flex-col rounded-2xl border border-white/10 bg-[#12151d] backdrop-blur shadow-sm p-4 sticky top-3 h-[calc(100vh-1.5rem)] text-white">
           <Link to="/admin" className="mb-4 flex items-center gap-2 font-semibold text-white">
@@ -49,9 +91,10 @@ const AdminShell: React.FC = () => {
                 key={i.to}
                 to={i.to}
                 end
-                className={({isActive}) => `rounded-lg px-3 py-2 text-white hover:bg-white/5 ${isActive ? 'bg-white/10 border border-white/10' : ''}`}
+                className={({isActive}) => `rounded-lg px-3 py-2 text-white hover:bg-white/5 flex items-center gap-2 ${isActive ? 'bg-white/10 border border-white/10' : ''}`}
               >
-                {i.label}
+                <span className="text-slate-300"><i.Icon /></span>
+                <span>{i.label}</span>
               </NavLink>
             ))}
           </nav>
@@ -63,7 +106,7 @@ const AdminShell: React.FC = () => {
 
         {/* Main (independent scroll) */}
         <main className="flex-1 overflow-y-auto">
-          <div className="rounded-2xl border border-white/10 auth-card backdrop-blur p-4 shadow-sm h-full">
+          <div className="rounded-2xl border border-white/10 auth-card backdrop-blur p-4 shadow-sm ">
             <Outlet />
           </div>
         </main>
@@ -88,9 +131,10 @@ const AdminShell: React.FC = () => {
                   to={i.to}
                   end
                   onClick={() => setOpen(false)}
-                  className={({isActive}) => `rounded-lg px-3 py-2 text-white hover:bg-white/5 ${isActive ? 'bg-white/10 border border-white/10' : ''}`}
+                  className={({isActive}) => `rounded-lg px-3 py-2 text-white hover:bg-white/5 flex items-center gap-2 ${isActive ? 'bg-white/10 border border-white/10' : ''}`}
                 >
-                  {i.label}
+                  <span className="text-slate-300"><i.Icon /></span>
+                  <span>{i.label}</span>
                 </NavLink>
               ))}
             </nav>
@@ -141,3 +185,4 @@ const AdminShell: React.FC = () => {
 }
 
 export default AdminShell
+

@@ -35,6 +35,39 @@ const fmtInr = (n?: number | string | null) => {
   return v.toLocaleString(undefined, { style: 'currency', currency: 'INR' })
 }
 
+// Small inline icons for metrics
+const IconCheck = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M20 6L9 17l-5-5" />
+  </svg>
+)
+const IconTruck = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M3 7h11v8H3z" />
+    <path d="M14 11h4l3 3v1h-7z" />
+    <circle cx="7" cy="18" r="2" /><circle cx="18" cy="18" r="2" />
+  </svg>
+)
+const IconClock = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v6l4 2" />
+  </svg>
+)
+const IconProgress = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M12 3a9 9 0 1 0 9 9" />
+  </svg>
+)
+const IconGrid = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <rect x="3" y="3" width="7" height="7" rx="1.5" />
+    <rect x="14" y="3" width="7" height="7" rx="1.5" />
+    <rect x="3" y="14" width="7" height="7" rx="1.5" />
+    <rect x="14" y="14" width="7" height="7" rx="1.5" />
+  </svg>
+)
+
 const TechnicianDashboard: React.FC = () => {
   const { user } = useAuth()
   const [repairs, setRepairs] = useState<RepairOrderLite[]>([])
@@ -44,6 +77,7 @@ const TechnicianDashboard: React.FC = () => {
   const initialTab = (sp.get('tab') as 'pending'|'in_progress'|'completed') || 'pending'
   const [tab, setTab] = useState<'pending' | 'in_progress' | 'completed'>(initialTab)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const hasTab = !!sp.get('tab')
 
   // Estimate form state per row
   const [estimateForm, setEstimateForm] = useState<Record<string, { amount: string; serviceCharge: string; timeRequired: string }>>({})
@@ -85,8 +119,6 @@ const TechnicianDashboard: React.FC = () => {
     setSp(next, { replace: true })
     setTab(t)
   }
-
-  
 
   const myRepairs = useMemo(() => {
     const techId = user?.id
@@ -169,43 +201,77 @@ const TechnicianDashboard: React.FC = () => {
     delivered: myRepairs.filter(r=>r.status==='delivered').length,
   }), [myRepairs])
 
-  return (
-    <div className="space-y-5 text-white">
-      {/* Greeting and actions */}
-      <header className="rounded-xl border border-white/10 bg-[#0f1218]/60 p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-xl font-semibold">Hi, {user?.firstName} {user?.lastName}</h1>
-            <p className="text-sm text-slate-300">Track your assigned repairs and manage jobs.</p>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap justify-start sm:justify-end">
-            {(['pending','in_progress','completed'] as const)
-              .filter(t => t !== tab)
-              .map(t => (
-                <button key={t}
-                  onClick={()=>setTabUrl(t)}
-                  className={`btn btn-outline`}
-                >{t === 'in_progress' ? 'In Progress' : t.charAt(0).toUpperCase()+t.slice(1)}</button>
-              ))}
-          </div>
-        </div>
-      </header>
+  const pieData = useMemo(() => (
+    [
+      { label: 'Pending', value: counts.pending, color: '#F59E0B' },
+      { label: 'In Progress', value: counts.in_progress, color: '#7C6FF1' },
+      { label: 'Completed', value: counts.completed, color: '#A48AFB' },
+    ]
+  ), [counts.pending, counts.in_progress, counts.completed])
 
-      {/* Overview cards */}
-      <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        {[
-          { label: 'Completed', value: counts.completed },
-          { label: 'Delivered', value: counts.delivered },
-          { label: 'Pending', value: counts.pending },
-          { label: 'In Progress', value: counts.in_progress },
-          { label: 'Total', value: counts.total },
-        ].map(c => (
-          <div key={c.label} className="rounded-lg border border-white/10 bg-[#12151d] p-3">
-            <div className="text-sm text-slate-300">{c.label}</div>
-            <div className="mt-1 text-2xl font-semibold">{c.value}</div>
-          </div>
-        ))}
-      </section>
+  return (
+    <div className="space-y-6 text-white pb-4 sm:pb-16 md:pb-0">
+      {!hasTab && (
+        <>
+          {/* Hero to mirror admin */}
+          <section className="relative overflow-hidden rounded-xl border border-white/10 bg-[linear-gradient(180deg,#0b0d12_0%,#0f1218_100%)] p-6">
+            <span className="pointer-events-none absolute -top-6 -left-6 h-20 w-20 rounded-full bg-[#A48AFB]/20 blur-xl anim-float-slow" />
+            <span className="pointer-events-none absolute -bottom-8 -right-8 h-24 w-24 rounded-full bg-[#A48AFB]/15 blur-xl anim-float-rev" />
+            <div className="relative">
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">Technician Dashboard</h1>
+              <p className="mt-1 text-slate-300">Welcome {user?.firstName} {user?.lastName}. Monitor and manage your assigned repair jobs.</p>
+              <div className="mt-4 flex flex-wrap gap-3 text-sm">
+                <span className="rounded-md border border-white/10 px-3 py-1.5 bg-white/5 text-white/90">My Jobs: {counts.total}</span>
+                <span className="rounded-md border border-white/10 px-3 py-1.5 bg-white/5 text-white/90">Pending: {counts.pending}</span>
+                <span className="rounded-md border border-white/10 px-3 py-1.5 bg-white/5 text-white/90">In Progress: {counts.in_progress}</span>
+              </div>
+            </div>
+          </section>
+
+          {/* Overview + Chart grid like admin */}
+          <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Chart */}
+            <div className="rounded-2xl border border-white/10 auth-card backdrop-blur p-0 lg:col-span-2 overflow-hidden bg-[#12151d] text-white">
+              <div className="px-5 pt-4 pb-2 border-b border-white/10 bg-white/5">
+                <h3 className="text-lg font-semibold text-white">Dashboard Overview</h3>
+              </div>
+              <div className="p-5">
+                <TechPieChart data={pieData} />
+                <div className="mt-4 flex items-center gap-4 text-xs text-slate-300">
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{background:'#F59E0B'}} /> Pending</span>
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{background:'#7C6FF1'}} /> In Progress</span>
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{background:'#A48AFB'}} /> Completed</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Right side metrics (5 cards) */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <div className="rounded-xl border border-white/10 bg-[#12151d] p-4 shadow-sm min-w-0">
+                <p className="text-xs text-slate-300 flex items-center gap-2 overflow-hidden"><span className="text-emerald-300 shrink-0"><IconCheck /></span> <span className="truncate whitespace-nowrap" title="Completed">Completed</span></p>
+                <p className="text-3xl font-bold text-white">{counts.completed}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-[#12151d] p-4 shadow-sm min-w-0">
+                <p className="text-xs text-slate-300 flex items-center gap-2 overflow-hidden"><span className="text-slate-300 shrink-0"><IconTruck /></span> <span className="truncate whitespace-nowrap" title="Delivered">Delivered</span></p>
+                <p className="text-3xl font-bold text-white">{counts.delivered}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-[#12151d] p-4 shadow-sm min-w-0">
+                <p className="text-xs text-slate-300 flex items-center gap-2 overflow-hidden"><span className="text-amber-300 shrink-0"><IconClock /></span> <span className="truncate whitespace-nowrap" title="Pending">Pending</span></p>
+                <p className="text-3xl font-bold text-white">{counts.pending}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-[#12151d] p-4 shadow-sm min-w-0">
+                <p className="text-xs text-slate-300 flex items-center gap-2 overflow-hidden"><span className="text-[#A48AFB] shrink-0"><IconProgress /></span> <span className="truncate whitespace-nowrap" title="In Progress">In Progress</span></p>
+                <p className="text-3xl font-bold text-white">{counts.in_progress}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-[#12151d] p-4 shadow-sm md:col-span-2 lg:col-span-1 min-w-0">
+                <p className="text-xs text-slate-300 flex items-center gap-2 overflow-hidden"><span className="text-slate-300 shrink-0"><IconGrid /></span> <span className="truncate whitespace-nowrap" title="Total">Total</span></p>
+                <p className="text-3xl font-bold text-white">{counts.total}</p>
+              </div>
+            </div>
+          </section>
+          
+        </>
+      )}
 
       {loading ? (
         <div className="py-10 text-center text-slate-300">Loading jobs...</div>
@@ -213,6 +279,14 @@ const TechnicianDashboard: React.FC = () => {
         <div className="py-3 text-rose-400">{error}</div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-white/10 bg-[#12151d]">
+          {/* Quick tab buttons like before */}
+          <div className="flex items-center gap-2 p-3 border-b border-white/10">
+            {(['pending','in_progress','completed'] as const).map(t => (
+              <button key={t} onClick={()=> hasTab ? setTabUrl(t) : setTab(t)}
+                className={`rounded-md px-3 py-1.5 text-sm ${hasTab && tab===t ? 'bg-white/10 border border-white/20 text-white' : 'border border-white/10 hover:bg-white/5 text-slate-200'}`}
+              >{t==='in_progress'?'In Progress':t.charAt(0).toUpperCase()+t.slice(1)}</button>
+            ))}
+          </div>
           <table className="min-w-full text-sm">
             <thead>
               <tr className="text-left text-slate-300 border-b border-white/10">
@@ -225,7 +299,7 @@ const TechnicianDashboard: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(r => (
+              {(!hasTab ? filtered.slice(0,3) : filtered).map(r => (
                 <tr key={r.id} className="border-t border-white/10 hover:bg-white/5 align-top">
                   <td className="py-2 px-3 font-medium">{r.ticketNumber || r.id.slice(0,8)}</td>
                   <td className="py-2 px-3">{[r.brand, r.model].filter(Boolean).join(' ') || r.deviceType || '-'}</td>
@@ -282,9 +356,73 @@ const TechnicianDashboard: React.FC = () => {
               ))}
             </tbody>
           </table>
+          {!hasTab && filtered.length > 3 && (
+            <div className="flex justify-end p-3 border-t border-white/10">
+              <button onClick={()=>setTabUrl(tab)} className="btn">View all</button>
+            </div>
+          )}
         </div>
       )}
     </div>
+  )
+}
+
+// Donut pie chart for technician status totals (with hover center info)
+const TechPieChart: React.FC<{ data: { label: string; value: number; color: string }[] }> = ({ data }) => {
+  const width = 320, height = 200
+  // Center horizontally in the viewBox
+  const cx = width / 2, cy = 100
+  const outerR = 70, innerR = 42
+  const total = Math.max(1, data.reduce((s, d) => s + (d.value || 0), 0))
+  const [hover, setHover] = useState<number | null>(null)
+  let start = -Math.PI / 2
+  const arcs = data.map(d => {
+    const frac = (d.value || 0) / total
+    const end = start + frac * Math.PI * 2
+    const large = end - start > Math.PI ? 1 : 0
+    const x0 = cx + outerR * Math.cos(start), y0 = cy + outerR * Math.sin(start)
+    const x1 = cx + outerR * Math.cos(end),   y1 = cy + outerR * Math.sin(end)
+    const xi0 = cx + innerR * Math.cos(end),  yi0 = cy + innerR * Math.sin(end)
+    const xi1 = cx + innerR * Math.cos(start),yi1 = cy + innerR * Math.sin(start)
+    const dPath = `M ${x0} ${y0} A ${outerR} ${outerR} 0 ${large} 1 ${x1} ${y1} L ${xi0} ${yi0} A ${innerR} ${innerR} 0 ${large} 0 ${xi1} ${yi1} Z`
+    const mid = (start + end) / 2
+    const percent = Math.round(((d.value || 0) / total) * 100)
+    start = end
+    return { dPath, color: d.color, label: d.label, value: d.value || 0, percent }
+  })
+  const focus = hover !== null ? arcs[hover] : null
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-56 mx-auto block">
+      <g>
+        {arcs.map((a, i) => (
+          <g key={i}
+             onMouseEnter={() => setHover(i)}
+             onMouseLeave={() => setHover(null)}
+             onFocus={() => setHover(i)}
+             onBlur={() => setHover(null)}
+             role="button" tabIndex={0} style={{cursor:'pointer'}}>
+            <path d={a.dPath}
+                  fill={a.color}
+                  opacity={hover === null ? (a.value === 0 ? 0.25 : 0.95) : (hover === i ? 1 : 0.18)}
+                  stroke={hover === i ? '#ffffff' : 'none'} strokeWidth={hover === i ? 1.5 : 0}
+            />
+          </g>
+        ))}
+        {/* center text */}
+        <circle cx={cx} cy={cy} r={innerR} fill="#0b0d12" />
+        {focus ? (
+          <>
+            <text x={cx} y={cy - 6} textAnchor="middle" fontSize="12" fill="#cbd5e1">{focus.label}</text>
+            <text x={cx} y={cy + 12} textAnchor="middle" fontSize="18" fill="#ffffff" fontWeight={700}>{focus.value} ({focus.percent}%)</text>
+          </>
+        ) : (
+          <>
+            <text x={cx} y={cy - 4} textAnchor="middle" fontSize="12" fill="#cbd5e1">Total</text>
+            <text x={cx} y={cy + 14} textAnchor="middle" fontSize="18" fill="#ffffff" fontWeight={700}>{total}</text>
+          </>
+        )}
+      </g>
+    </svg>
   )
 }
 

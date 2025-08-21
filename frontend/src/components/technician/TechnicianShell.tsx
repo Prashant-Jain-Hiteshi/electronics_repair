@@ -1,19 +1,56 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
+
+// Small inline icons
+const IconClock = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v6l4 2" />
+  </svg>
+)
+const IconProgress = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M12 3a9 9 0 1 0 9 9" />
+  </svg>
+)
+const IconCheck = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M20 6L9 17l-5-5" />
+  </svg>
+)
+const IconDashboard = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <rect x="3" y="3" width="7" height="7" rx="1.5" />
+    <rect x="14" y="3" width="7" height="7" rx="1.5" />
+    <rect x="3" y="14" width="7" height="7" rx="1.5" />
+    <rect x="14" y="14" width="7" height="7" rx="1.5" />
+  </svg>
+)
 
 const TechnicianShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, logout } = useAuth()
   const location = useLocation()
   const isActive = (queryTab: string) => {
     const sp = new URLSearchParams(location.search)
-    return location.pathname === '/technician' && (sp.get('tab') || 'pending') === queryTab
+    const tab = sp.get('tab')
+    return location.pathname === '/technician' && tab === queryTab
+  }
+  const isDashboardActive = () => {
+    const sp = new URLSearchParams(location.search)
+    return location.pathname === '/technician' && !sp.get('tab')
   }
   const [open, setOpen] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const base = (import.meta as any)?.env?.BASE_URL || '/'
 
   const homePath = '/technician'
+
+  // Lock browser/body scroll while in technician shell
+  useEffect(() => {
+    document.body.classList.add('no-scroll')
+    return () => { document.body.classList.remove('no-scroll') }
+  }, [])
 
   return (
     <div className="auth-dark min-h-screen relative overflow-hidden">
@@ -22,17 +59,16 @@ const TechnicianShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
       <span className="pointer-events-none absolute -top-8 -left-8 h-32 w-32 rounded-full bg-[#A48AFB]/10 blur-2xl anim-float-slow" />
       <span className="pointer-events-none absolute bottom-0 right-0 h-40 w-40 rounded-full bg-[#A48AFB]/10 blur-2xl anim-float-rev" />
 
-      {/* Mobile top bar */}
-      <div className="md:hidden sticky top-0 z-20 flex items-center justify-between px-3 py-3 bg-[#0b0d12]/80 backdrop-blur border-b border-white/10 text-white">
-        <button aria-label="Open menu" className="rounded-md border border-white/10 bg-white/5 px-3 py-2" onClick={() => setOpen(true)}>☰</button>
-        <Link to={homePath} className="flex items-center gap-2 font-semibold text-white">
-          <img src={`${base}logo.svg`} alt="Electro-Repair" className="h-6 w-auto" />
-          <span>Electro-Repair</span>
-        </Link>
-        <span />
-      </div>
-
-      <div className="relative flex gap-3 p-3 items-stretch h-[calc(100vh-1.5rem)] overflow-hidden">
+      <div className="relative flex flex-col md:flex-row gap-3 p-3 pt-0 md:pt-3 items-stretch h-[calc(100vh-1.5rem)] overflow-y-auto md:overflow-hidden">
+        {/* Mobile top bar (inside scroll container so it stays sticky) */}
+        <div className="md:hidden sticky top-0 z-20 flex items-center justify-between px-3 py-3 bg-[#0b0d12]/80 backdrop-blur border border-white/10 rounded-xl text-white">
+          <button aria-label="Open menu" className="rounded-md border border-white/10 bg-white/5 px-3 py-2" onClick={() => setOpen(true)}>☰</button>
+          <Link to={homePath} className="flex items-center gap-2 font-semibold text-white">
+            <img src={`${base}logo.svg`} alt="Electro-Repair" className="h-6 w-auto" />
+            <span>Electro-Repair</span>
+          </Link>
+          <span />
+        </div>
         {/* Sidebar - desktop */}
         <aside className="hidden md:flex w-60 shrink-0 flex-col rounded-2xl border border-white/10 bg-[#12151d] backdrop-blur shadow-sm p-4 sticky top-3 h-[calc(100vh-1.5rem)] text-white">
           <Link to={homePath} className="mb-4 flex items-center gap-2 font-semibold text-white">
@@ -40,9 +76,22 @@ const TechnicianShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
             <span>Electro-Repair</span>
           </Link>
           <nav className="flex flex-col gap-1 text-sm">
-            <Link to={`${homePath}?tab=pending`} className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 ${isActive('pending') ? 'bg-white/10 border border-white/10' : ''}`}>Pending</Link>
-            <Link to={`${homePath}?tab=in_progress`} className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 ${isActive('in_progress') ? 'bg-white/10 border border-white/10' : ''}`}>In Progress</Link>
-            <Link to={`${homePath}?tab=completed`} className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 ${isActive('completed') ? 'bg-white/10 border border-white/10' : ''}`}>Completed</Link>
+            <Link to={homePath} className={`rounded-lg px-3 py-2 text-white hover:bg:white/5 hover:bg-white/5 flex items-center gap-2 ${isDashboardActive() ? 'bg-white/10 border border-white/10' : ''}`}>
+              <span className="text-slate-300"><IconDashboard /></span>
+              <span>Dashboard</span>
+            </Link>
+            <Link to={`${homePath}?tab=pending`} className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 flex items-center gap-2 ${isActive('pending') ? 'bg-white/10 border border-white/10' : ''}`}>
+              <span className="text-slate-300"><IconClock /></span>
+              <span>Pending</span>
+            </Link>
+            <Link to={`${homePath}?tab=in_progress`} className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 flex items-center gap-2 ${isActive('in_progress') ? 'bg-white/10 border border-white/10' : ''}`}>
+              <span className="text-slate-300"><IconProgress /></span>
+              <span>In Progress</span>
+            </Link>
+            <Link to={`${homePath}?tab=completed`} className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 flex items-center gap-2 ${isActive('completed') ? 'bg-white/10 border border-white/10' : ''}`}>
+              <span className="text-slate-300"><IconCheck /></span>
+              <span>Completed</span>
+            </Link>
           </nav>
           <div className="mt-auto pt-4 border-t border-white/10 text-xs text-slate-300">
             <div className="mb-2">{user?.firstName} {user?.lastName}</div>
@@ -51,7 +100,7 @@ const TechnicianShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
         </aside>
 
         {/* Main content */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 md:overflow-y-auto">
           <div className="rounded-2xl border border-white/10 auth-card backdrop-blur p-4 shadow-sm text-white">
             {children}
           </div>
@@ -71,9 +120,22 @@ const TechnicianShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
               <button aria-label="Close" className="rounded-md border border-white/10 px-2 py-1 hover:bg-white/5" onClick={() => setOpen(false)}>✕</button>
             </div>
             <nav className="flex flex-col gap-1 text-sm">
-              <Link onClick={() => setOpen(false)} to={`${homePath}?tab=pending`} className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 ${isActive('pending') ? 'bg-white/10 border border-white/10' : ''}`}>Pending</Link>
-              <Link onClick={() => setOpen(false)} to={`${homePath}?tab=in_progress`} className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 ${isActive('in_progress') ? 'bg-white/10 border border-white/10' : ''}`}>In Progress</Link>
-              <Link onClick={() => setOpen(false)} to={`${homePath}?tab=completed`} className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 ${isActive('completed') ? 'bg-white/10 border border-white/10' : ''}`}>Completed</Link>
+              <Link onClick={() => setOpen(false)} to={homePath} className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 flex items-center gap-2 ${isDashboardActive() ? 'bg-white/10 border border-white/10' : ''}`}>
+                <span className="text-slate-300"><IconDashboard /></span>
+                <span>Dashboard</span>
+              </Link>
+              <Link onClick={() => setOpen(false)} to={`${homePath}?tab=pending`} className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 flex items-center gap-2 ${isActive('pending') ? 'bg-white/10 border border-white/10' : ''}`}>
+                <span className="text-slate-300"><IconClock /></span>
+                <span>Pending</span>
+              </Link>
+              <Link onClick={() => setOpen(false)} to={`${homePath}?tab=in_progress`} className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 flex items-center gap-2 ${isActive('in_progress') ? 'bg-white/10 border border-white/10' : ''}`}>
+                <span className="text-slate-300"><IconProgress /></span>
+                <span>In Progress</span>
+              </Link>
+              <Link onClick={() => setOpen(false)} to={`${homePath}?tab=completed`} className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 flex items-center gap-2 ${isActive('completed') ? 'bg-white/10 border border-white/10' : ''}`}>
+                <span className="text-slate-300"><IconCheck /></span>
+                <span>Completed</span>
+              </Link>
             </nav>
             <div className="mt-auto pt-4 text-xs text-slate-300">
               <div className="mb-2">{user?.firstName} {user?.lastName}</div>

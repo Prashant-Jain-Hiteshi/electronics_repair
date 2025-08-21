@@ -10,6 +10,12 @@ html, body, #root {
   height: 100%;
 }
 
+/* Utility to lock page scroll (used on mobile customer panel) */
+.no-scroll {
+  overflow: hidden !important;
+  height: 100vh;
+}
+
 body {
   @apply bg-muted-100 text-slate-800 font-sans;
 }
@@ -35,6 +41,10 @@ body {
   /* overall background similar to screenshot */
   background-color: #0b0d12; /* near black */
   color: #e5e7eb; /* slate-200 */
+  /* Prevent page-level scroll on customer shell; allow inner main to scroll */
+  min-height: 100vh;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 .auth-dark .auth-panel {
@@ -71,6 +81,13 @@ body {
 
 .auth-dark .link {
   color: #A48AFB;
+}
+
+/* Fix: at widths ~639-652px, add bottom space so last content isn't clipped */
+@media (min-width: 639px) and (max-width: 652px) {
+  .customer-main {
+    padding-bottom: 96px; /* ~6rem extra space */
+  }
 }
 
 /* Typography inside auth card – force white for readability on dark */

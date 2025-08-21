@@ -30,7 +30,7 @@ export async function requestOtp(req: Request, res: Response) {
     const { mobile } = req.body || {};
     if (!mobile) return res.status(400).json({ message: 'Valid Indian mobile is required' });
     // Validate Indian mobile number
-    const re = /^[6-9]\d{9}$/;
+    const re = /^\d{10}$/;
     if (!re.test(mobile)) return res.status(400).json({ message: 'Valid Indian mobile is required' });
 
     const user = await User.findOne({ where: { mobile } });
@@ -63,9 +63,7 @@ export async function requestOtp(req: Request, res: Response) {
 export async function verifyOtp(req: Request, res: Response) {
   try {
     const { mobile, otp, firstName, lastName, address } = req.body || {};
-    if (!mobile || !otp) return res.status(400).json({ message: 'Valid Indian mobile is required' });
-    const re = /^[6-9]\d{9}$/;
-    if (!re.test(mobile)) return res.status(400).json({ message: 'Valid Indian mobile is required' });
+    if (!mobile || !otp) return res.status(400).json({ message: 'mobile and otp are required' });
 
     let user = await User.findOne({ where: { mobile } });
     const now = new Date();

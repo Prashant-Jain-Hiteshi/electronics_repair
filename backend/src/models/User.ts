@@ -63,8 +63,8 @@ User.init(
       allowNull: true,
       unique: true,
       validate: {
-        // Indian mobile numbers starting with 6-9 and total 10 digits
-        is: /^[6-9]\d{9}$/,
+        // Exactly 10 digits
+        is: /^\d{10}$/,
       },
     },
     firstName: {

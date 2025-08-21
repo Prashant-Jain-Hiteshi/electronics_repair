@@ -9,7 +9,7 @@ const router = Router();
 // Unified step 1: request OTP by mobile (login or signup)
 router.post(
   '/request-otp',
-  [body('mobile').matches(/^[6-9]\d{9}$/).withMessage('Valid Indian mobile is required')],
+  [body('mobile').matches(/^\d{10}$/).withMessage('Valid Indian mobile is required')],
   handleValidation,
   requestOtp
 );
@@ -17,7 +17,7 @@ router.post(
 router.post(
   '/verify-otp',
   [
-    body('mobile').matches(/^[6-9]\d{9}$/),
+    body('mobile').isString().notEmpty(),
     body('otp').isLength({ min: 6, max: 6 }),
     body('firstName').optional().isString(),
     body('lastName').optional().isString(),
@@ -31,7 +31,7 @@ router.post(
   [
     body('role').isIn(['admin', 'technician', 'customer']),
     body('userId').optional().isString(),
-    body('mobile').optional().matches(/^[6-9]\d{9}$/),
+    body('mobile').optional().matches(/^\d{10}$/),
   ],
   handleValidation,
   requireAuth,
