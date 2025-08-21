@@ -7,6 +7,7 @@ import inventoryRoutes from './routes/inventory.routes';
 import repairsRoutes from './routes/repairs.routes';
 import paymentsRoutes from './routes/payments.routes';
 import path from 'path';
+import { Request, Response } from 'express';
 
 const app = express();
 
@@ -22,12 +23,12 @@ app.use(
 );
 
 // Root - Hello World
-app.get('/', (_req, res) => {
+app.get('/', (_req: Request, res: Response) => {
   res.type('text/plain').send('Hello World');
 });
 
 // Health check
-app.get('/health', (_req, res) => {
+app.get('/health', (_req: Request, res: Response) => {
   res.status(200).json({ status: 'ok' });
 });
 
