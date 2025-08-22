@@ -332,13 +332,9 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         </div>
 
         {/* On mobile, subtract the top bar (~3.5rem) so only the main scrolls */}
-        <div className="relative flex gap-3 p-3 items-stretch h-[calc(100vh-3.5rem)] sm:h-[calc(100vh-1.5rem)] overflow-hidden">
+        <div className="relative flex gap-3 p-3 items-stretch h-[calc(100vh-3.5rem)] md:h-[calc(100vh-4rem)] overflow-hidden">
           {/* Sidebar - desktop sticky full height (visible ≥ md) */}
-          <aside className="hidden md:flex w-60 shrink-0 flex-col rounded-2xl border border-white/10 bg-[#12151d] backdrop-blur shadow-sm p-4 sticky top-3 h-[calc(100vh-1.5rem)] text-white">
-            <Link to={homePath} className="mb-4 flex items-center gap-2 font-semibold text-white">
-              <img src={`${base}logo.svg`} alt="Electro-Repair" className="h-7 w-auto" />
-              <span>Electro-Repair</span>
-            </Link>
+          <aside className="hidden md:flex w-60 shrink-0 flex-col rounded-2xl border border-white/10 bg-[#12151d] backdrop-blur shadow-sm p-4 sticky top-3 h-full text-white">
             <nav className="flex flex-col gap-1 text-sm">
               <Link to={homePath} className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 flex items-center gap-2 ${isActive('/') ? 'bg-white/10 border border-white/10' : ''}`}>
                 <span className="text-slate-300"><IconDashboard /></span>
