@@ -11,7 +11,7 @@ import sequelize from '../config/database';
 import { buildRepairInvoiceHTML, InvoiceTotals } from '../utils/invoice';
 import User, { UserRole } from '../models/User';
 import RepairAttachment from '../models/RepairAttachment';
-import { emitToUser } from '../socket';
+import { emitToUser, emitToRole } from '../socket';
 
 // Technician/Admin: list all repair orders
 export async function listAllRepairs(_req: AuthRequest, res: Response) {
@@ -164,6 +164,23 @@ export async function createRepair(req: AuthRequest, res: Response) {
       }
     }
 
+    // Notify admins in real-time that a new repair has been created
+    try {
+      const productName = `${(repair as any).deviceType || ''} ${(repair as any).brand || ''} ${(repair as any).model || ''}`.trim();
+      emitToRole('admin', 'admin:notification:new', {
+        kind: 'new_repair',
+        id: (repair as any).id,
+        deviceType: (repair as any).deviceType,
+        brand: (repair as any).brand,
+        model: (repair as any).model,
+        title: productName || 'New repair',
+        message: 'A new repair order has been created.',
+        createdAt: new Date().toISOString(),
+      });
+    } catch (notifyErr) {
+      console.error('Failed to emit admin new repair notification:', notifyErr);
+    }
+
     return res.status(201).json({ repair, attachments: createdAttachments });
   } catch (err) {
     console.error('Create repair error:', err);
@@ -197,6 +214,38 @@ export async function updateRepair(req: AuthRequest, res: Response) {
             message: `Status updated to ${newStatus}.`,
             createdAt: new Date().toISOString(),
           });
+        }
+
+        // Also notify all admins
+        try {
+          const productName = `${(repair as any).deviceType || ''} ${(repair as any).brand || ''} ${(repair as any).model || ''}`.trim();
+          emitToRole('admin', 'admin:notification:new', {
+            kind: 'status_change',
+            repairId: (repair as any).id,
+            previousStatus: prevStatus,
+            status: newStatus,
+            title: productName || 'Repair status updated',
+            message: `Technician updated status to ${newStatus}.`,
+            createdAt: new Date().toISOString(),
+          });
+        } catch (adminNotifyErr) {
+          console.error('Failed to emit admin status change notification:', adminNotifyErr);
+        }
+
+        // Also notify technicians
+        try {
+          const productName = `${(repair as any).deviceType || ''} ${(repair as any).brand || ''} ${(repair as any).model || ''}`.trim();
+          emitToRole('technician', 'tech:notification:new', {
+            kind: 'status_change',
+            repairId: (repair as any).id,
+            previousStatus: prevStatus,
+            status: newStatus,
+            title: productName || 'Repair status updated',
+            message: `Status changed to ${newStatus}.`,
+            createdAt: new Date().toISOString(),
+          });
+        } catch (techNotifyErr) {
+          console.error('Failed to emit technician status change notification:', techNotifyErr);
         }
       }
     } catch (notifyErr) {
@@ -451,6 +500,38 @@ export async function cancelRepair(req: AuthRequest, res: Response) {
       }
     } catch (notifyErr) {
       console.error('Failed to emit cancellation notification:', notifyErr);
+    }
+
+    // Also notify admins about cancellation
+    try {
+      const productName = `${(repair as any).deviceType || ''} ${(repair as any).brand || ''} ${(repair as any).model || ''}`.trim();
+      emitToRole('admin', 'admin:notification:new', {
+        kind: 'status_change',
+        repairId: (repair as any).id,
+        previousStatus: RepairStatus.PENDING,
+        status: RepairStatus.CANCELLED,
+        title: productName || 'Repair cancelled',
+        message: 'Repair was cancelled by user/admin.',
+        createdAt: new Date().toISOString(),
+      });
+    } catch (adminCancelNotifyErr) {
+      console.error('Failed to emit admin cancellation notification:', adminCancelNotifyErr);
+    }
+
+    // Also notify technicians about cancellation
+    try {
+      const productName = `${(repair as any).deviceType || ''} ${(repair as any).brand || ''} ${(repair as any).model || ''}`.trim();
+      emitToRole('technician', 'tech:notification:new', {
+        kind: 'status_change',
+        repairId: (repair as any).id,
+        previousStatus: RepairStatus.PENDING,
+        status: RepairStatus.CANCELLED,
+        title: productName || 'Repair cancelled',
+        message: 'Repair was cancelled.',
+        createdAt: new Date().toISOString(),
+      });
+    } catch (techCancelNotifyErr) {
+      console.error('Failed to emit technician cancellation notification:', techCancelNotifyErr);
     }
 
     return res.status(200).json({ repair });

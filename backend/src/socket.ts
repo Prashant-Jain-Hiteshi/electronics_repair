@@ -25,12 +25,17 @@ export function initSocket(server: HTTPServer) {
       const secret = process.env.JWT_SECRET || 'dev_secret_change_me';
       const payload = jwt.verify(finalToken, secret) as any;
       const userId = payload?.id as string | undefined;
+      const role = (payload?.role as string | undefined) || undefined;
       if (!userId) {
         socket.disconnect(true);
         return;
       }
       // Join a per-user room to target notifications
       socket.join(`user:${userId}`);
+      // Also join a role-based room to broadcast to all admins/technicians if needed
+      if (role) {
+        socket.join(`role:${role}`);
+      }
 
       // Debug: log successful connection
       try {
@@ -65,5 +70,13 @@ export function emitToUser(userId: string, event: string, payload: any) {
     console.log(`[socket] emit to user:${userId} event=${event} payloadKeys=${Object.keys(payload || {}).join(',')}`);
   } catch {}
   io.to(`user:${userId}`).emit(event, payload);
+}
+
+export function emitToRole(role: string, event: string, payload: any) {
+  if (!io) return;
+  try {
+    console.log(`[socket] emit to role:${role} event=${event} payloadKeys=${Object.keys(payload || {}).join(',')}`);
+  } catch {}
+  io.to(`role:${role}`).emit(event, payload);
 }
 
