@@ -1,6 +1,7 @@
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
+import { connectSocket, disconnectSocket } from '@/api/socket'
 
 // Small inline icons to match sample style
 const IconDashboard = () => (
@@ -61,8 +62,83 @@ const AdminShell: React.FC = () => {
 
   const base = (import.meta as any)?.env?.BASE_URL || '/'
 
+  // Admin notifications (persist per-user)
+  const [notifOpen, setNotifOpen] = useState(false)
+  const [adminNotifs, setAdminNotifs] = useState<any[]>([])
+  const btnRef = useRef<HTMLButtonElement | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+
+  const userId = user?.id as string | undefined
+  const storeKey = userId ? `admin_notifs_${userId}` : 'admin_notifs'
+  const loadNotifs = () => { try { return JSON.parse(localStorage.getItem(storeKey) || '[]') } catch { return [] } }
+  const saveNotifs = (list: any[]) => localStorage.setItem(storeKey, JSON.stringify(list))
+  const unreadCount = adminNotifs.filter(n => !n.read).length
+
+  // Click outside & escape to close
+  useEffect(() => {
+    const onDown = (e: MouseEvent | TouchEvent) => {
+      const t = e.target as Node
+      if (notifOpen) {
+        const inside = (!!menuRef.current && menuRef.current.contains(t)) || (!!btnRef.current && btnRef.current.contains(t))
+        if (!inside) setNotifOpen(false)
+      }
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setNotifOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('touchstart', onDown, { passive: true } as any)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('touchstart', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [notifOpen])
+
+  // Prevent global page scrollbar on desktop while AdminShell is mounted
+  useEffect(() => {
+    const apply = () => {
+      const isDesktop = window.innerWidth >= 768
+      if (isDesktop) {
+        document.documentElement.style.overflow = 'hidden'
+        document.body.style.overflow = 'hidden'
+      } else {
+        document.documentElement.style.overflow = ''
+        document.body.style.overflow = ''
+      }
+    }
+    apply()
+    window.addEventListener('resize', apply)
+    return () => {
+      window.removeEventListener('resize', apply)
+      document.documentElement.style.overflow = ''
+      document.body.style.overflow = ''
+    }
+  }, [])
+
+  // Socket listener for admin notifications
+  useEffect(() => {
+    if (user?.role !== 'admin') return
+    setAdminNotifs(loadNotifs())
+    const token = localStorage.getItem('auth_token') || ''
+    const s = connectSocket(token)
+    const handler = (payload: any) => {
+      const baseId = payload.repairId ?? payload.id ?? Math.random().toString(36).slice(2)
+      const next = [ { id: `${baseId}-${payload.createdAt}`, ...payload, read: false }, ...loadNotifs() ].slice(0, 50)
+      saveNotifs(next)
+      setAdminNotifs(next)
+    }
+    s.on('admin:notification:new', handler)
+    return () => {
+      try { s.off('admin:notification:new', handler) } catch {}
+      disconnectSocket()
+    }
+  }, [user?.role])
+
+  const markRead = (id: string) => { const next = adminNotifs.map(n => n.id===id?{...n, read:true}:n); saveNotifs(next); setAdminNotifs(next) }
+  const markAllRead = () => { const next = adminNotifs.map(n => ({...n, read:true})); saveNotifs(next); setAdminNotifs(next) }
+
   return (
-    <div className="auth-dark fixed inset-0 md:relative md:min-h-screen md:overflow-hidden">
+    <div className="auth-dark fixed inset-0 overflow-hidden">
       {/* Dark background to match theme */}
       <div className="absolute inset-0 bg-[linear-gradient(180deg,#0b0d12_0%,#0f1218_100%)]" />
       <span className="pointer-events-none absolute -top-8 -left-8 h-32 w-32 rounded-full bg-[#A48AFB]/10 blur-2xl anim-float-slow" />
@@ -75,7 +151,52 @@ const AdminShell: React.FC = () => {
           <img src={`${base}logo.svg`} alt="Electro-Repair" className="h-6 w-auto" />
           <span>Electro-Repair</span>
         </Link>
-        <span className="text-xs px-2 py-1 rounded border border-white/10">Admin</span>
+        <div className="relative">
+          <button
+            ref={btnRef}
+            aria-label="Notifications"
+            className="relative rounded-md border border-white/10 bg-white/5 px-3 py-2"
+            onClick={() => setNotifOpen(v => !v)}
+          >
+            🔔
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 inline-flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] h-5 min-w-[1.25rem] px-1">{unreadCount}</span>
+            )}
+          </button>
+          {notifOpen && (
+            <div ref={menuRef} className="absolute right-0 mt-2 w-80 max-w-[90vw] rounded-lg border border-white/10 bg-[#12151d] text-white shadow-xl z-40">
+              <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+                <div className="font-medium text-sm">Notifications</div>
+                <button className="text-xs rounded border border-white/10 px-2 py-1 hover:bg-white/5" onClick={markAllRead} disabled={unreadCount===0}>Mark all read</button>
+              </div>
+              <div className="max-h-80 overflow-y-auto scrollbar-none">
+                {adminNotifs.length === 0 ? (
+                  <div className="p-3 text-xs text-slate-300">No notifications</div>
+                ) : (
+                  adminNotifs.slice(0,20).map(n => (
+                    <div key={n.id} className="px-3 py-2 border-b border-white/5 text-sm flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate"><span className="font-medium">{n.title || 'Update'}</span> • {n.message}</div>
+                        <div className="text-[11px] text-slate-400 truncate">{new Date(n.createdAt).toLocaleString()}</div>
+                      </div>
+                      <div className="shrink-0 flex items-center gap-2">
+                        {(n.kind === 'new_repair' || n.kind === 'status_change') && (
+                          <Link to={`/admin/repairs/${n.repairId ?? n.id}`} onClick={() => setNotifOpen(false)} className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5 text-white">Open</Link>
+                        )}
+                        {!n.read && (
+                          <button className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5" onClick={() => markRead(n.id)}>Mark read</button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="px-3 py-2 border-t border-white/10 flex justify-end">
+                <button className="text-xs rounded border border-white/10 px-2 py-1 hover:bg-white/5" onClick={() => { saveNotifs([]); setAdminNotifs([]); }} disabled={adminNotifs.length===0}>Clear all</button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="relative mt-14 md:mt-0 flex gap-3 p-3 items-stretch h-[calc(100vh-3.5rem)] sm:h-[calc(100vh-1.5rem)] overflow-hidden">
@@ -105,7 +226,61 @@ const AdminShell: React.FC = () => {
         </aside>
 
         {/* Main (independent scroll) */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto scrollbar-none">
+          {/* Desktop sticky header row with notifications */}
+          <div className="hidden md:flex sticky top-0 z-20 mb-3 items-center justify-between text-white bg-[#0b0d12]/80 backdrop-blur border border-white/10 rounded-xl px-3 py-2">
+            <div className="flex items-center gap-2 font-semibold">
+              <img src={`${base}logo.svg`} alt="Electro-Repair" className="h-7 w-auto" />
+              <span>Admin</span>
+            </div>
+            <div className="relative">
+              <button
+                ref={btnRef}
+                aria-label="Notifications"
+                className="relative rounded-md border border-white/10 bg-white/5 px-3 py-1.5 hover:bg-white/10"
+                onClick={() => setNotifOpen(v => !v)}
+              >
+                🔔
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 inline-flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] h-5 min-w-[1.25rem] px-1">{unreadCount}</span>
+                )}
+              </button>
+              {notifOpen && (
+                <div ref={menuRef} className="absolute right-0 mt-2 w-80 max-w-[90vw] rounded-lg border border-white/10 bg-[#12151d] text-white shadow-xl z-40">
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+                    <div className="font-medium text-sm">Notifications</div>
+                    <button className="text-xs rounded border border-white/10 px-2 py-1 hover:bg-white/5" onClick={markAllRead} disabled={unreadCount===0}>Mark all read</button>
+                  </div>
+                  <div className="max-h-80 overflow-y-auto scrollbar-none">
+                    {adminNotifs.length === 0 ? (
+                      <div className="p-3 text-xs text-slate-300">No notifications</div>
+                    ) : (
+                      adminNotifs.slice(0,20).map(n => (
+                        <div key={n.id} className="px-3 py-2 border-b border-white/5 text-sm flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="truncate"><span className="font-medium">{n.title || 'Update'}</span> • {n.message}</div>
+                            <div className="text-[11px] text-slate-400 truncate">{new Date(n.createdAt).toLocaleString()}</div>
+                          </div>
+                          <div className="shrink-0 flex items-center gap-2">
+                            {(n.kind === 'new_repair' || n.kind === 'status_change') && (
+                              <Link to={`/admin/repairs/${n.repairId ?? n.id}`} className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5 text-white">Open</Link>
+                            )}
+                            {!n.read && (
+                              <button className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5" onClick={() => markRead(n.id)}>Mark read</button>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <div className="px-3 py-2 border-t border-white/10 flex justify-end">
+                    <button className="text-xs rounded border border-white/10 px-2 py-1 hover:bg-white/5" onClick={() => { saveNotifs([]); setAdminNotifs([]); }} disabled={adminNotifs.length===0}>Clear all</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="rounded-2xl border border-white/10 auth-card backdrop-blur p-4 shadow-sm ">
             <Outlet />
           </div>
@@ -152,6 +327,9 @@ const AdminShell: React.FC = () => {
         @keyframes floatYrev { 0%,100% { transform: translateY(0) } 50% { transform: translateY(8px) } }
         .anim-float-slow { animation: floatY 14s ease-in-out infinite; }
         .anim-float-rev { animation: floatYrev 16s ease-in-out infinite; }
+        /* Hide scrollbars but keep scrolling */
+        .scrollbar-none { scrollbar-width: none; -ms-overflow-style: none; }
+        .scrollbar-none::-webkit-scrollbar { width: 0; height: 0; display: none; }
       `}</style>
 
       {/* Themed confirmation modal for logout */}

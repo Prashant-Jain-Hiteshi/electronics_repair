@@ -75,7 +75,8 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [open, setOpen] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
-  const [repairs, setRepairs] = useState<any[]>([])
+  // Admin notifications state
+  const [adminNotifs, setAdminNotifs] = useState<any[]>([])
   const base = (import.meta as any)?.env?.BASE_URL || '/'
 
   // Customer notifications state
@@ -100,6 +101,16 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     localStorage.setItem(storeKey, JSON.stringify(list))
   }
   const unreadCount = custNotifs.filter(n => !n.read).length
+
+  // Admin local storage helpers
+  const adminStoreKey = userId ? `admin_notifs_${userId}` : 'admin_notifs'
+  function loadAdminNotifs(): any[] {
+    try { return JSON.parse(localStorage.getItem(adminStoreKey) || '[]') } catch { return [] }
+  }
+  function saveAdminNotifs(list: any[]) {
+    localStorage.setItem(adminStoreKey, JSON.stringify(list))
+  }
+  const adminUnreadCount = adminNotifs.filter(n => !n.read).length
 
   // Lock browser scroll for ALL customer pages (header stays, only content scrolls)
   useEffect(() => {
@@ -179,42 +190,42 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     }
   }, [user?.role])
 
-  // Notifications: treat new pending repairs as notifications. Track read IDs in localStorage.
-  function getReadIds(): Set<string> {
-    try { return new Set(JSON.parse(localStorage.getItem('admin_read_notifications') || '[]')) } catch { return new Set() }
-  }
-  function setReadIds(ids: Set<string>) {
-    localStorage.setItem('admin_read_notifications', JSON.stringify(Array.from(ids)))
-  }
-  const unread = repairs.filter(r => r?.status === 'pending' && !getReadIds().has(r.id))
-
+  // Admin: connect socket and listen for admin notifications
   useEffect(() => {
     if (user?.role !== 'admin') return
-    let mounted = true
-    let timer: any
-    const load = async () => {
-      try {
-        const res = await api.get('/repairs')
-        if (!mounted) return
-        setRepairs(res.data?.repairs || [])
-      } catch { /* ignore */ }
+    setAdminNotifs(loadAdminNotifs())
+    const token = localStorage.getItem('auth_token') || ''
+    const s = connectSocket(token)
+    const handler = (payload: any) => {
+      const next = [
+        { id: `${payload.id}-${payload.createdAt}`, ...payload, read: false },
+        ...loadAdminNotifs(),
+      ].slice(0, 50)
+      saveAdminNotifs(next)
+      setAdminNotifs(next)
     }
-    load()
-    timer = setInterval(load, 30000)
-    return () => { mounted = false; if (timer) clearInterval(timer) }
+    s.on('admin:notification:new', handler)
+    return () => {
+      try { s.off('admin:notification:new', handler) } catch {}
+      disconnectSocket()
+    }
   }, [user?.role])
 
-  const markRead = (id: string) => {
-    const s = getReadIds(); s.add(id); setReadIds(s); setRepairs([...repairs])
+  const markAdminRead = (id: string) => {
+    const next = adminNotifs.map(n => n.id === id ? { ...n, read: true } : n)
+    saveAdminNotifs(next)
+    setAdminNotifs(next)
   }
-  const markAllRead = () => {
-    const s = getReadIds(); unread.forEach(n => s.add(n.id)); setReadIds(s); setRepairs([...repairs])
+  const markAdminAllRead = () => {
+    const next = adminNotifs.map(n => ({ ...n, read: true }))
+    saveAdminNotifs(next)
+    setAdminNotifs(next)
   }
 
   // Customer: Sidebar layout with animated background
   if (user?.role === 'customer') {
     return (
-      <div className="auth-dark fixed inset-0 md:relative md:min-h-screen md:overflow-hidden">
+      <div className="auth-dark fixed inset-0 overflow-hidden">
         {/* Dark themed background */}
         <div className="absolute inset-0 bg-[linear-gradient(180deg,#0b0d12_0%,#0f1218_100%)]" />
         <span className="pointer-events-none absolute -top-8 -left-8 h-32 w-32 rounded-full bg-[#A48AFB]/10 blur-2xl anim-float-slow" />
@@ -250,7 +261,7 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                     disabled={custNotifs.length === 0}
                   >Clear all</button>
                 </div>
-                <div className="max-h-80 overflow-y-auto">
+                <div className="max-h-80 overflow-y-auto scrollbar-none">
                   {custNotifs.length === 0 ? (
                     <div className="p-3 text-xs text-slate-300">No notifications</div>
                   ) : (
@@ -306,7 +317,7 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                     disabled={unreadCount === 0}
                   >Mark all read</button>
                 </div>
-                <div className="max-h-80 overflow-y-auto">
+                <div className="max-h-80 overflow-y-auto scrollbar-none">
                   {custNotifs.length === 0 ? (
                     <div className="p-3 text-xs text-slate-300">No notifications</div>
                   ) : (
@@ -356,7 +367,7 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           </aside>
 
           {/* Main (independent scroll) */}
-          <main className="customer-main flex-1 overflow-y-auto">
+          <main className="customer-main flex-1 overflow-y-auto scrollbar-none">
             <div className="rounded-2xl border border-white/10 auth-card backdrop-blur p-4 shadow-sm ">
               {children}
             </div>
@@ -405,6 +416,9 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           .anim-float-rev { animation: floatYrev 16s ease-in-out infinite; }
           /* Prevent browser window from scrolling in customer view */
           .no-scroll { overflow: hidden !important; }
+          /* Hide scrollbars but keep scrolling */
+          .scrollbar-none { scrollbar-width: none; -ms-overflow-style: none; }
+          .scrollbar-none::-webkit-scrollbar { width: 0; height: 0; display: none; }
         `}</style>
 
       {/* Logout confirmation modal (dark themed) */}
@@ -467,9 +481,9 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                   ref={adminBtnRef}
                 >
                   🔔
-                  {unread.length > 0 && (
+                  {adminUnreadCount > 0 && (
                     <span className="absolute -top-1 -right-1 inline-flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] h-5 min-w-[1.25rem] px-1">
-                      {unread.length}
+                      {adminUnreadCount}
                     </span>
                   )}
                 </button>
@@ -479,27 +493,38 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                       <div className="font-medium text-sm">Notifications</div>
                       <button
                         className="text-xs rounded border px-2 py-1 hover:bg-slate-50"
-                        onClick={markAllRead}
-                        disabled={unread.length === 0}
+                        onClick={markAdminAllRead}
+                        disabled={adminUnreadCount === 0}
                       >Mark all read</button>
                     </div>
                     <div className="max-h-80 overflow-y-auto">
-                      {unread.length === 0 ? (
-                        <div className="p-3 text-xs text-slate-600">No new notifications</div>
+                      {adminNotifs.length === 0 ? (
+                        <div className="p-3 text-xs text-slate-600">No notifications</div>
                       ) : (
-                        unread.slice(0, 20).map(n => (
-                          <div key={n.id} className="px-3 py-2 border-b text-sm flex items-center justify-between gap-2">
+                        adminNotifs.slice(0, 20).map(n => (
+                          <div key={n.id} className="px-3 py-2 border-b text-sm flex items-center justify-between gap-2 opacity-100">
                             <div className="min-w-0">
-                              <div className="truncate"><span className="font-medium">New repair</span> • {n.deviceType} {n.brand} {n.model}</div>
-                              <div className="text-xs text-slate-500 truncate">Ticket {n.id}</div>
+                              <div className="truncate"><span className="font-medium">{n.title || 'Update'}</span> • {n.message}</div>
+                              <div className="text-xs text-slate-500 truncate">{new Date(n.createdAt).toLocaleString()}</div>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
-                              <Link to={`/admin/repairs/${n.id}`} className="btn btn-xs">Open</Link>
-                              <button className="btn btn-xs" onClick={() => markRead(n.id)}>Mark read</button>
+                              {n.kind === 'new_repair' && (
+                                <Link to={`/admin/repairs/${n.id}`} className="btn btn-xs">Open</Link>
+                              )}
+                              {!n.read && (
+                                <button className="btn btn-xs" onClick={() => markAdminRead(n.id)}>Mark read</button>
+                              )}
                             </div>
                           </div>
                         ))
                       )}
+                    </div>
+                    <div className="px-3 py-2 border-t flex justify-end">
+                      <button
+                        className="text-xs rounded border px-2 py-1 hover:bg-slate-50"
+                        onClick={() => { saveAdminNotifs([]); setAdminNotifs([]); }}
+                        disabled={adminNotifs.length === 0}
+                      >Clear all</button>
                     </div>
                   </div>
                 )}
