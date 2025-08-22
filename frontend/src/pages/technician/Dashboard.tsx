@@ -209,6 +209,26 @@ const TechnicianDashboard: React.FC = () => {
     ]
   ), [counts.pending, counts.in_progress, counts.completed])
 
+  // Toggle between Line and Pie chart like admin
+  const [chartView, setChartView] = useState<'line' | 'pie'>('line')
+
+  // Monthly series for line chart derived from myRepairs (last 12 months)
+  const seriesData = useMemo(() => {
+    const now = new Date()
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+    const countsByMonth = new Array(12).fill(0)
+    myRepairs.forEach(r => {
+      const d = new Date(r.updatedAt)
+      if (Number.isFinite(d.getTime())) {
+        const diffMonths = (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth())
+        if (diffMonths >= 0 && diffMonths < 12) {
+          countsByMonth[d.getMonth()] += 1
+        }
+      }
+    })
+    return months.map((m, i) => ({ label: m, value: countsByMonth[i] }))
+  }, [myRepairs])
+
   return (
     <div className="space-y-6 text-white pb-4 sm:pb-16 md:pb-0">
       {!hasTab && (
@@ -232,16 +252,31 @@ const TechnicianDashboard: React.FC = () => {
           <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Chart */}
             <div className="rounded-2xl border border-white/10 auth-card backdrop-blur p-0 lg:col-span-2 overflow-hidden bg-[#12151d] text-white">
-              <div className="px-5 pt-4 pb-2 border-b border-white/10 bg-white/5">
+              <div className="px-5 pt-4 pb-2 border-b border-white/10 bg-white/5 flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-white">Dashboard Overview</h3>
+                <div className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 p-0.5">
+                  <button onClick={()=>setChartView('line')} className={`px-2.5 py-1 text-xs rounded-md ${chartView==='line'?'bg-white/20 text-white':'text-slate-300 hover:text-white'}`}>Line</button>
+                  <button onClick={()=>setChartView('pie')} className={`px-2.5 py-1 text-xs rounded-md ${chartView==='pie'?'bg-white/20 text-white':'text-slate-300 hover:text-white'}`}>Pie</button>
+                </div>
               </div>
               <div className="p-5">
-                <TechPieChart data={pieData} />
-                <div className="mt-4 flex items-center gap-4 text-xs text-slate-300">
-                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{background:'#F59E0B'}} /> Pending</span>
-                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{background:'#7C6FF1'}} /> In Progress</span>
-                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{background:'#A48AFB'}} /> Completed</span>
-                </div>
+                {chartView === 'line' ? (
+                  <>
+                    <LineAreaChart data={seriesData} />
+                    <div className="mt-3 text-xs text-slate-300">
+                      <span className="inline-flex items-center gap-1"><span className="h-1.5 w-3 rounded-full" style={{background:'#7C6FF1'}} /> Total Requests</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <TechPieChart data={pieData} />
+                    <div className="mt-4 flex items-center gap-4 text-xs text-slate-300">
+                      <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{background:'#F59E0B'}} /> Pending</span>
+                      <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{background:'#7C6FF1'}} /> In Progress</span>
+                      <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{background:'#A48AFB'}} /> Completed</span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -367,14 +402,21 @@ const TechnicianDashboard: React.FC = () => {
   )
 }
 
-// Donut pie chart for technician status totals (with hover center info)
+// Donut pie chart with rotation + auto cycling highlight
 const TechPieChart: React.FC<{ data: { label: string; value: number; color: string }[] }> = ({ data }) => {
   const width = 320, height = 200
-  // Center horizontally in the viewBox
   const cx = width / 2, cy = 100
   const outerR = 70, innerR = 42
   const total = Math.max(1, data.reduce((s, d) => s + (d.value || 0), 0))
   const [hover, setHover] = useState<number | null>(null)
+  const [autoIndex, setAutoIndex] = useState(0)
+  useEffect(() => {
+    const n = data.length || 1
+    const id = setInterval(() => setAutoIndex(i => (i + 1) % n), 2500)
+    return () => clearInterval(id)
+  }, [data.length])
+  const effectiveHover = hover !== null ? hover : (data.length ? autoIndex % data.length : null)
+
   let start = -Math.PI / 2
   const arcs = data.map(d => {
     const frac = (d.value || 0) / total
@@ -385,15 +427,15 @@ const TechPieChart: React.FC<{ data: { label: string; value: number; color: stri
     const xi0 = cx + innerR * Math.cos(end),  yi0 = cy + innerR * Math.sin(end)
     const xi1 = cx + innerR * Math.cos(start),yi1 = cy + innerR * Math.sin(start)
     const dPath = `M ${x0} ${y0} A ${outerR} ${outerR} 0 ${large} 1 ${x1} ${y1} L ${xi0} ${yi0} A ${innerR} ${innerR} 0 ${large} 0 ${xi1} ${yi1} Z`
-    const mid = (start + end) / 2
     const percent = Math.round(((d.value || 0) / total) * 100)
     start = end
     return { dPath, color: d.color, label: d.label, value: d.value || 0, percent }
   })
-  const focus = hover !== null ? arcs[hover] : null
+  const focus = effectiveHover !== null && effectiveHover! < arcs.length ? arcs[effectiveHover!] : null
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-56 mx-auto block">
       <g>
+        <animateTransform attributeName="transform" type="rotate" from={`0 ${cx} ${cy}`} to={`360 ${cx} ${cy}`} dur="12s" repeatCount="indefinite" />
         {arcs.map((a, i) => (
           <g key={i}
              onMouseEnter={() => setHover(i)}
@@ -403,24 +445,96 @@ const TechPieChart: React.FC<{ data: { label: string; value: number; color: stri
              role="button" tabIndex={0} style={{cursor:'pointer'}}>
             <path d={a.dPath}
                   fill={a.color}
-                  opacity={hover === null ? (a.value === 0 ? 0.25 : 0.95) : (hover === i ? 1 : 0.18)}
-                  stroke={hover === i ? '#ffffff' : 'none'} strokeWidth={hover === i ? 1.5 : 0}
+                  opacity={effectiveHover === null ? (a.value === 0 ? 0.25 : 0.95) : (effectiveHover === i ? 1 : 0.18)}
+                  stroke={effectiveHover === i ? '#ffffff' : 'none'} strokeWidth={effectiveHover === i ? 1.5 : 0}
             />
           </g>
         ))}
-        {/* center text */}
-        <circle cx={cx} cy={cy} r={innerR} fill="#0b0d12" />
-        {focus ? (
-          <>
-            <text x={cx} y={cy - 6} textAnchor="middle" fontSize="12" fill="#cbd5e1">{focus.label}</text>
-            <text x={cx} y={cy + 12} textAnchor="middle" fontSize="18" fill="#ffffff" fontWeight={700}>{focus.value} ({focus.percent}%)</text>
-          </>
-        ) : (
-          <>
-            <text x={cx} y={cy - 4} textAnchor="middle" fontSize="12" fill="#cbd5e1">Total</text>
-            <text x={cx} y={cy + 14} textAnchor="middle" fontSize="18" fill="#ffffff" fontWeight={700}>{total}</text>
-          </>
-        )}
+      </g>
+      {/* center text */}
+      <circle cx={cx} cy={cy} r={innerR} fill="#0b0d12" />
+      {focus ? (
+        <>
+          <text x={cx} y={cy - 6} textAnchor="middle" fontSize="12" fill="#cbd5e1">{focus.label}</text>
+          <text x={cx} y={cy + 12} textAnchor="middle" fontSize="18" fill="#ffffff" fontWeight={700}>{focus.value} ({focus.percent}%)</text>
+        </>
+      ) : (
+        <>
+          <text x={cx} y={cy - 4} textAnchor="middle" fontSize="12" fill="#cbd5e1">Total</text>
+          <text x={cx} y={cy + 14} textAnchor="middle" fontSize="18" fill="#ffffff" fontWeight={700}>{total}</text>
+        </>
+      )}
+    </svg>
+  )
+}
+
+// Animated Line + Area chart with gradient and moving marker
+function LineAreaChart({ data }: { data: { label: string; value: number }[] }) {
+  const width = 640
+  const height = 220
+  const padding = { left: 24, right: 24, top: 16, bottom: 34 }
+  const w = width - padding.left - padding.right
+  const h = height - padding.top - padding.bottom
+
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  const nonZero = data?.some(d => d.value > 0)
+  const series = (nonZero && data?.length) ? data : [5,7,4,9,12,8,11,6,10,7,9,13].map((v,i)=>({label:months[i], value:v}))
+
+  const maxV = Math.max(1, ...series.map(d => d.value))
+  const stepX = series.length > 1 ? (w / (series.length - 1)) : w
+  const points = series.map((d, i) => {
+    const x = padding.left + i * stepX
+    const y = padding.top + (h - (d.value / maxV) * h)
+    return { x, y }
+  })
+
+  const pathD = (() => {
+    if (!points.length) return ''
+    const d: string[] = []
+    d.push(`M ${points[0].x} ${points[0].y}`)
+    for (let i = 1; i < points.length; i++) {
+      const p0 = points[i - 1]
+      const p1 = points[i]
+      const cx = (p0.x + p1.x) / 2
+      d.push(`C ${cx} ${p0.y}, ${cx} ${p1.y}, ${p1.x} ${p1.y}`)
+    }
+    return d.join(' ')
+  })()
+
+  const areaD = pathD
+    ? `${pathD} L ${padding.left + (series.length - 1) * stepX} ${padding.top + h} L ${padding.left} ${padding.top + h} Z`
+    : ''
+
+  const gradId = React.useRef(`grad-${Math.random().toString(36).slice(2)}`).current
+  const pathId = React.useRef(`path-${Math.random().toString(36).slice(2)}`).current
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-56 block">
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#A48AFB" stopOpacity="0.6" />
+          <stop offset="100%" stopColor="#A48AFB" stopOpacity="0.08" />
+        </linearGradient>
+        <filter id="soft-tech" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur" />
+        </filter>
+      </defs>
+
+      <path d={areaD} fill={`url(#${gradId})`} />
+      <path id={pathId} d={pathD} fill="none" stroke="#7C6FF1" strokeWidth={3} style={{ filter: 'url(#soft-tech)' }}>
+        <animate attributeName="stroke-dasharray" from="0,1000" to="1000,0" dur="1.1s" fill="freeze" />
+      </path>
+
+      <circle r={6} fill="#ffffff" stroke="#7C6FF1" strokeWidth={3}>
+        <animateMotion dur="10s" repeatCount="indefinite" rotate="auto">
+          <mpath href={`#${pathId}`} />
+        </animateMotion>
+      </circle>
+
+      <g>
+        {series.map((d, i) => (
+          <text key={i} x={padding.left + i * stepX} y={height - 10} textAnchor="middle" fontSize="10" fill="#cbd5e1">{d.label}</text>
+        ))}
       </g>
     </svg>
   )

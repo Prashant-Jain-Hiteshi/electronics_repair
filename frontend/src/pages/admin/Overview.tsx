@@ -52,6 +52,8 @@ const Overview: React.FC = () => {
   const [recent, setRecent] = useState<any[]>([])
   const [recentLoading, setRecentLoading] = useState<boolean>(true)
   const [recentError, setRecentError] = useState<string | null>(null)
+  // chart view toggle: line or pie (default line)
+  const [chartView, setChartView] = useState<'line' | 'pie'>('line')
 
   // Pie data from data.byStatus totals (defensive to missing data)
   const pieData = useMemo(() => {
@@ -104,6 +106,23 @@ const Overview: React.FC = () => {
     return () => { mounted = false }
   }, [])
 
+  // Build monthly series for line chart from repair records
+  const seriesData = useMemo(() => {
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+    const counts = new Array(12).fill(0)
+    const list = Array.isArray(recent) ? recent : []
+    for (const r of list) {
+      const dt = r?.updatedAt || r?.createdAt
+      const d = dt ? new Date(dt) : null
+      if (!d || isNaN(d.getTime())) continue
+      counts[d.getMonth()] += 1
+    }
+    const series = counts.map((v, i) => ({ label: months[i], value: v }))
+    // fallback to sample if all zeros
+    const any = series.some(s => s.value > 0)
+    return any ? series : [5,7,4,9,12,8,11,6,10,7,9,13].map((v,i)=>({ label: months[i], value: v }))
+  }, [recent])
+
   if (loading) return <div className="text-white">Loading...</div>
   if (error) return <div className="text-red-400">{error}</div>
   if (!data) return null
@@ -147,16 +166,39 @@ const Overview: React.FC = () => {
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Chart */}
         <div className="rounded-2xl border border-white/10 auth-card backdrop-blur p-0 lg:col-span-2 overflow-hidden bg-[#12151d] text-white">
-          <div className="px-5 pt-4 pb-2 border-b border-white/10 bg-white/5">
-            <h3 className="text-lg font-semibold text-white">Dashboard Overview</h3>
+          <div className="px-5 pt-4 pb-2 flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-white">Repair Overview</h3>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setChartView('line')} className={`px-3 py-1.5 rounded-full text-xs border ${chartView==='line' ? 'bg-violet-600/80 text-white border-violet-500' : 'text-slate-300 border-slate-700 hover:bg-slate-800'}`}>Line</button>
+              <button onClick={() => setChartView('pie')} className={`px-3 py-1.5 rounded-full text-xs border ${chartView==='pie' ? 'bg-violet-600/80 text-white border-violet-500' : 'text-slate-300 border-slate-700 hover:bg-slate-800'}`}>Pie</button>
+            </div>
+          </div>
+          {/* Legend */}
+          <div className="px-5">
+            {chartView === 'line' ? (
+              <div className="flex items-center gap-4 text-xs text-slate-300">
+                <span className="inline-flex items-center gap-2">
+                  <span className="inline-block h-2 w-6 rounded-full" style={{ background: '#7C6FF1' }} />
+                  Total Requests
+                </span>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-300">
+                {pieData.map((p, idx) => (
+                  <span key={idx} className="inline-flex items-center gap-2">
+                    <span className="inline-block h-2 w-2 rounded-full" style={{ background: p.color }} />
+                    {p.label}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           <div className="p-5">
-            <AdminPieChart data={pieData} />
-            <div className="mt-4 flex items-center gap-4 text-xs text-slate-300">
-              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{background:'#F59E0B'}} /> Pending</span>
-              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{background:'#7C6FF1'}} /> In Progress</span>
-              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{background:'#A48AFB'}} /> Completed</span>
-            </div>
+            {chartView === 'line' ? (
+              <LineAreaChart data={seriesData} />
+            ) : (
+              <AdminPieChart data={pieData} />
+            )}
           </div>
         </div>
 
@@ -258,13 +300,22 @@ const StatCard: React.FC<{ title: string; value: number | string }> = ({ title, 
   </div>
 )
 
-// Donut pie chart for status totals (with hover highlight)
+// Donut pie chart with rotation + auto-cycling highlight (mirrors customer)
 const AdminPieChart: React.FC<{ data: { label: string; value: number; color: string }[] }> = ({ data }) => {
   const width = 320, height = 200
   const cx = width / 2, cy = 100
   const outerR = 70, innerR = 42
   const total = Math.max(1, data.reduce((s, d) => s + (d.value || 0), 0))
+  // hover and auto cycle index
   const [hover, setHover] = useState<number | null>(null)
+  const [autoIndex, setAutoIndex] = useState(0)
+  useEffect(() => {
+    const n = data.length || 1
+    const id = setInterval(() => setAutoIndex(i => (i + 1) % n), 2500)
+    return () => clearInterval(id)
+  }, [data.length])
+  const effectiveHover = hover !== null ? hover : (data.length ? autoIndex % data.length : null)
+
   let start = -Math.PI / 2
   const arcs = data.map(d => {
     const frac = (d.value || 0) / total
@@ -275,56 +326,118 @@ const AdminPieChart: React.FC<{ data: { label: string; value: number; color: str
     const xi0 = cx + innerR * Math.cos(end),  yi0 = cy + innerR * Math.sin(end)
     const xi1 = cx + innerR * Math.cos(start),yi1 = cy + innerR * Math.sin(start)
     const dPath = `M ${x0} ${y0} A ${outerR} ${outerR} 0 ${large} 1 ${x1} ${y1} L ${xi0} ${yi0} A ${innerR} ${innerR} 0 ${large} 0 ${xi1} ${yi1} Z`
-    const mid = (start + end) / 2
-    const lx = cx + (outerR + 16) * Math.cos(mid)
-    const ly = cy + (outerR + 16) * Math.sin(mid)
     const percent = Math.round(((d.value || 0) / total) * 100)
     start = end
-    return { dPath, color: d.color, label: d.label, value: d.value || 0, lx, ly, percent }
+    return { dPath, color: d.color, label: d.label, value: d.value || 0, percent }
   })
-  const focus = hover !== null ? arcs[hover] : null
+  const focus = effectiveHover !== null && effectiveHover! < arcs.length ? arcs[effectiveHover!] : null
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-56 mx-auto block">
+      {/* Rotating arcs (no outside labels) */}
       <g>
+        <animateTransform attributeName="transform" type="rotate" from={`0 ${cx} ${cy}`} to={`360 ${cx} ${cy}`} dur="12s" repeatCount="indefinite" />
         {arcs.map((a, i) => (
           <g key={i}
              onMouseEnter={() => setHover(i)}
              onMouseLeave={() => setHover(null)}
              onFocus={() => setHover(i)}
              onBlur={() => setHover(null)}
-             role="button"
-             tabIndex={0}
-             style={{cursor:'pointer'}}>
+             role="button" tabIndex={0} style={{cursor:'pointer'}}>
             <path d={a.dPath}
                   fill={a.color}
-                  opacity={hover === null ? (a.value === 0 ? 0.25 : 0.95) : (hover === i ? 1 : 0.18)}
-                  stroke={hover === i ? '#ffffff' : 'none'}
-                  strokeWidth={hover === i ? 1.5 : 0}
+                  opacity={effectiveHover === null ? (a.value === 0 ? 0.25 : 0.95) : (effectiveHover === i ? 1 : 0.18)}
+                  stroke={effectiveHover === i ? '#ffffff' : 'none'} strokeWidth={effectiveHover === i ? 1.5 : 0}
             />
           </g>
         ))}
-        {/* center text */}
-        <circle cx={cx} cy={cy} r={innerR} fill="#0b0d12" />
-        {focus ? (
-          <>
-            <text x={cx} y={cy - 6} textAnchor="middle" fontSize="12" fill="#cbd5e1">{focus.label}</text>
-            <text x={cx} y={cy + 12} textAnchor="middle" fontSize="18" fill="#ffffff" fontWeight={700}>{focus.value} ({focus.percent}%)</text>
-          </>
-        ) : (
-          <>
-            <text x={cx} y={cy - 4} textAnchor="middle" fontSize="12" fill="#cbd5e1">Total</text>
-            <text x={cx} y={cy + 14} textAnchor="middle" fontSize="18" fill="#ffffff" fontWeight={700}>{total}</text>
-          </>
-        )}
       </g>
-      {/* labels */}
+      {/* center text (static) */}
+      <circle cx={cx} cy={cy} r={innerR} fill="#0b0d12" />
+      {focus ? (
+        <>
+          <text x={cx} y={cy - 6} textAnchor="middle" fontSize="12" fill="#cbd5e1">{focus.label}</text>
+          <text x={cx} y={cy + 12} textAnchor="middle" fontSize="18" fill="#ffffff" fontWeight={700}>{focus.value} ({focus.percent}%)</text>
+        </>
+      ) : (
+        <>
+          <text x={cx} y={cy - 4} textAnchor="middle" fontSize="12" fill="#cbd5e1">Total</text>
+          <text x={cx} y={cy + 14} textAnchor="middle" fontSize="18" fill="#ffffff" fontWeight={700}>{total}</text>
+        </>
+      )}
+    </svg>
+  )
+}
+
+// Animated Line + Area chart with gradient fill and auto marker
+function LineAreaChart({ data }: { data: { label: string; value: number }[] }) {
+  const width = 640
+  const height = 220
+  const padding = { left: 24, right: 24, top: 16, bottom: 34 }
+  const w = width - padding.left - padding.right
+  const h = height - padding.top - padding.bottom
+
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  const nonZero = data?.some(d => d.value > 0)
+  const series = (nonZero && data?.length) ? data : [5,7,4,9,12,8,11,6,10,7,9,13].map((v,i)=>({label:months[i], value:v}))
+
+  const maxV = Math.max(1, ...series.map(d => d.value))
+  const stepX = series.length > 1 ? (w / (series.length - 1)) : w
+  const points = series.map((d, i) => {
+    const x = padding.left + i * stepX
+    const y = padding.top + (h - (d.value / maxV) * h)
+    return { x, y }
+  })
+
+  const pathD = (() => {
+    if (!points.length) return ''
+    const d: string[] = []
+    d.push(`M ${points[0].x} ${points[0].y}`)
+    for (let i = 1; i < points.length; i++) {
+      const p0 = points[i - 1]
+      const p1 = points[i]
+      const cx = (p0.x + p1.x) / 2
+      d.push(`C ${cx} ${p0.y}, ${cx} ${p1.y}, ${p1.x} ${p1.y}`)
+    }
+    return d.join(' ')
+  })()
+
+  const areaD = pathD
+    ? `${pathD} L ${padding.left + (series.length - 1) * stepX} ${padding.top + h} L ${padding.left} ${padding.top + h} Z`
+    : ''
+
+  const gradId = React.useRef(`grad-${Math.random().toString(36).slice(2)}`).current
+  const pathId = React.useRef(`path-${Math.random().toString(36).slice(2)}`).current
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-56 block">
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#A48AFB" stopOpacity="0.6" />
+          <stop offset="100%" stopColor="#A48AFB" stopOpacity="0.08" />
+        </linearGradient>
+        <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur" />
+        </filter>
+      </defs>
+
+      {/* area */}
+      <path d={areaD} fill={`url(#${gradId})`} />
+      {/* line with draw animation */}
+      <path id={pathId} d={pathD} fill="none" stroke="#7C6FF1" strokeWidth={3} style={{ filter: 'url(#soft)' }}>
+        <animate attributeName="stroke-dasharray" from="0,1000" to="1000,0" dur="1.1s" fill="freeze" />
+      </path>
+
+      {/* moving marker along path */}
+      <circle r={6} fill="#ffffff" stroke="#7C6FF1" strokeWidth={3}>
+        <animateMotion dur="10s" repeatCount="indefinite" rotate="auto">
+          <mpath href={`#${pathId}`} />
+        </animateMotion>
+      </circle>
+
+      {/* x-axis labels */}
       <g>
-        {arcs.map((a, i) => (
-          a.value > 0 ? (
-            <g key={i}>
-              <text x={a.lx} y={a.ly} textAnchor="middle" fontSize="11" fill="#cbd5e1">{a.percent}% ({a.value})</text>
-            </g>
-          ) : null
+        {series.map((d, i) => (
+          <text key={i} x={padding.left + i * stepX} y={height - 10} textAnchor="middle" fontSize="10" fill="#cbd5e1">{d.label}</text>
         ))}
       </g>
     </svg>
