@@ -6,6 +6,7 @@ import Inventory from './Inventory';
 import Payment from './Payment';
 import RepairPart from './RepairPart';
 import RepairAttachment from './RepairAttachment';
+import InventoryUsage from './InventoryUsage';
 
 // Associations
 // User-Customer (1:1)
@@ -34,6 +35,14 @@ Inventory.belongsToMany(RepairOrder, {
   as: 'usedInRepairs',
 });
 
+// Inventory - InventoryUsage (1:M)
+Inventory.hasMany(InventoryUsage, { foreignKey: 'inventoryId', as: 'usage' });
+InventoryUsage.belongsTo(Inventory, { foreignKey: 'inventoryId', as: 'inventory' });
+
+// RepairOrder - InventoryUsage (1:M, optional relation)
+RepairOrder.hasMany(InventoryUsage, { foreignKey: 'repairOrderId', as: 'partUsage' });
+InventoryUsage.belongsTo(RepairOrder, { foreignKey: 'repairOrderId', as: 'repairOrder' });
+
 // RepairOrder - Payment (1:M)
 RepairOrder.hasMany(Payment, { foreignKey: 'repairOrderId', as: 'payments' });
 Payment.belongsTo(RepairOrder, { foreignKey: 'repairOrderId', as: 'repairOrder' });
@@ -46,4 +55,4 @@ RepairAttachment.belongsTo(RepairOrder, { foreignKey: 'repairOrderId', as: 'repa
 RepairPart.belongsTo(Inventory, { foreignKey: 'inventoryId', as: 'Inventory' });
 RepairPart.belongsTo(RepairOrder, { foreignKey: 'repairOrderId', as: 'RepairOrder' });
 
-export { sequelize, User, Customer, RepairOrder, Inventory, Payment, RepairPart, RepairAttachment };
+export { sequelize, User, Customer, RepairOrder, Inventory, Payment, RepairPart, RepairAttachment, InventoryUsage };

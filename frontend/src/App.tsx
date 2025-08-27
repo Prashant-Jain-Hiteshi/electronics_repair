@@ -17,6 +17,7 @@ import AdminRepairs from '@/pages/admin/Repairs'
 import AdminRepairDetails from '@/pages/admin/AdminRepairDetails'
 import AdminInventory from '@/pages/admin/Inventory'
 import AdminPayments from '@/pages/admin/Payments'
+import AdminAnalytics from '@/pages/admin/Analytics'
 import TechnicianDashboard from '@/pages/technician/Dashboard'
 import TechnicianShell from '@/components/technician/TechnicianShell'
 
@@ -627,6 +628,7 @@ const App: React.FC = () => {
         <Route path="repairs/:id" element={<AdminRepairDetails />} />
         <Route path="inventory" element={<AdminInventory />} />
         <Route path="payments" element={<AdminPayments />} />
+        <Route path="analytics" element={<AdminAnalytics />} />
       </Route>
     </Routes>
   )

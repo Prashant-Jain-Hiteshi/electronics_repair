@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { api, type ApiError } from '@/api/client'
+import { connectSocket, getSocket } from '@/api/socket'
 
 type OverviewData = {
   repairsCount: number
@@ -54,6 +55,31 @@ const Overview: React.FC = () => {
   const [recentError, setRecentError] = useState<string | null>(null)
   // chart view toggle: line or pie (default line)
   const [chartView, setChartView] = useState<'line' | 'pie'>('line')
+  // live technician status
+  const [onlineTechs, setOnlineTechs] = useState<string[]>([])
+  const [techStatus, setTechStatus] = useState<{
+    id: string;
+    name: string;
+    online: boolean;
+    onJob: boolean;
+    mobile?: string;
+    address?: string | null;
+    stats?: { totalAssigned: number; inProgress: number; completed: number };
+  }[]>([])
+
+  // Analytics filters
+  const [revRange, setRevRange] = useState<'daily'|'weekly'|'monthly'>('monthly')
+  const [filterDevice, setFilterDevice] = useState<string>('')
+  const [filterTech, setFilterTech] = useState<string>('')
+  const [revMin, setRevMin] = useState<number | ''>('')
+  const [revMax, setRevMax] = useState<number | ''>('')
+  const [fromDate, setFromDate] = useState<string>('')
+  const [toDate, setToDate] = useState<string>('')
+
+  // Analytics data
+  const [revenueRows, setRevenueRows] = useState<any[]>([])
+  const [techPerf, setTechPerf] = useState<any[]>([])
+  const [deviceRows, setDeviceRows] = useState<any[]>([])
 
   // Pie data from data.byStatus totals (defensive to missing data)
   const pieData = useMemo(() => {
@@ -106,6 +132,124 @@ const Overview: React.FC = () => {
     return () => { mounted = false }
   }, [])
 
+  // Technician online status: initial fetch + socket updates
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const r = await api.get('/analytics/technicians/status')
+        if (!mounted) return
+        const ids = Array.isArray(r.data?.online) ? r.data.online as string[] : []
+        setOnlineTechs(ids)
+      } catch {}
+    })()
+    const token = localStorage.getItem('token') || ''
+    const s = getSocket() || connectSocket(token)
+    const handler = (payload: any) => {
+      const { userId, online } = payload || {}
+      if (!userId) return
+      setOnlineTechs(prev => {
+        const set = new Set(prev)
+        if (online) set.add(userId)
+        else set.delete(userId)
+        return Array.from(set)
+      })
+      // reflect into techStatus if already loaded
+      setTechStatus(prev => prev.map(t => t.id === userId ? { ...t, online: !!online } : t))
+    }
+    s.on('technician:status', handler)
+    return () => {
+      try { s.off('technician:status', handler) } catch {}
+      mounted = false
+    }
+  }, [])
+
+  // Poll full technician current status (online + onJob) periodically
+  useEffect(() => {
+    let mounted = true
+    let timer: any
+    const load = async () => {
+      try {
+        const r = await api.get('/analytics/technicians/current-status')
+        if (!mounted) return
+        const list = Array.isArray(r.data?.technicians) ? r.data.technicians : []
+        setTechStatus(list)
+        setOnlineTechs(list.filter((t: any) => t.online).map((t: any) => String(t.id)))
+      } catch {}
+    }
+    load()
+    timer = setInterval(load, 15000)
+    return () => { mounted = false; if (timer) clearInterval(timer) }
+  }, [])
+
+  // Load analytics when filters change
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        // Revenue trends
+        const rev = await api.get('/analytics/revenue', { params: { range: revRange, from: fromDate || undefined, to: toDate || undefined } })
+        if (!mounted) return
+        const rows = Array.isArray(rev.data?.rows) ? rev.data.rows : []
+        // optional revenue filter on client side
+        const filtered = rows.filter((r: any) => {
+          const total = Number(r.total || 0)
+          const minOk = revMin === '' || total >= Number(revMin)
+          const maxOk = revMax === '' || total <= Number(revMax)
+          return minOk && maxOk
+        })
+        setRevenueRows(filtered)
+      } catch {}
+
+      try {
+        // Technician performance
+        const tp = await api.get('/analytics/technicians/performance', { params: { from: fromDate || undefined, to: toDate || undefined } })
+        if (!mounted) return
+        let rows = Array.isArray(tp.data?.rows) ? tp.data.rows : []
+        if (filterTech) rows = rows.filter((r: any) => String(r.technicianId) === String(filterTech) || String(r.technician) === filterTech)
+        setTechPerf(rows)
+      } catch {}
+
+      try {
+        // Device distribution
+        const dev = await api.get('/analytics/repairs', { params: { groupBy: 'device', from: fromDate || undefined, to: toDate || undefined, deviceType: filterDevice || undefined, technicianId: filterTech || undefined } })
+        if (!mounted) return
+        let rows = Array.isArray(dev.data?.rows) ? dev.data.rows : []
+        if (filterDevice) rows = rows.filter((r: any) => String(r.deviceType || 'Unknown') === filterDevice)
+        setDeviceRows(rows)
+      } catch {}
+    })()
+    return () => { mounted = false }
+  }, [revRange, revMin, revMax, filterTech, filterDevice, fromDate, toDate])
+
+  // Map revenue rows to line series format
+  const revenueSeries = useMemo(() => {
+    const fmt = (d: any) => {
+      try {
+        const dt = new Date(d)
+        if (revRange === 'daily') return dt.toLocaleDateString(undefined, { month: 'short', day: '2-digit' })
+        if (revRange === 'weekly') return `Wk ${getWeek(dt)}`
+        return dt.toLocaleDateString(undefined, { month: 'short', year: '2-digit' })
+      } catch { return String(d) }
+    }
+    const s = (Array.isArray(revenueRows) ? revenueRows : []).map((r: any) => ({ label: fmt(r.bucket), value: Number(r.total || 0) }))
+    return s
+  }, [revenueRows, revRange])
+
+  // Quick Actions navigation
+  const navigate = useNavigate()
+  const goAssign = () => navigate('/admin/repairs?action=assign')
+  const goInvoice = () => navigate('/admin/repairs?action=invoice')
+  const goTechnicians = () => navigate('/admin/technicians')
+
+  function getWeek(d: Date) {
+    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
+    const dayNum = date.getUTCDay() || 7
+    date.setUTCDate(date.getUTCDate() + 4 - dayNum)
+    const yearStart = new Date(Date.UTC(date.getUTCFullYear(),0,1))
+    return Math.ceil((((date as any) - (yearStart as any)) / 86400000 + 1)/7)
+  }
+
   // Build monthly series for line chart from repair records
   const seriesData = useMemo(() => {
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
@@ -122,6 +266,35 @@ const Overview: React.FC = () => {
     const any = series.some(s => s.value > 0)
     return any ? series : [5,7,4,9,12,8,11,6,10,7,9,13].map((v,i)=>({ label: months[i], value: v }))
   }, [recent])
+
+  // Simple Bar chart for technician performance
+  const TechBarChart: React.FC<{ data: { name: string; value: number }[] }> = ({ data }) => {
+    const width = 640
+    const height = 220
+    const padding = { left: 34, right: 16, top: 16, bottom: 34 }
+    const w = width - padding.left - padding.right
+    const h = height - padding.top - padding.bottom
+    const maxV = Math.max(1, ...data.map(d => d.value))
+    const bw = data.length ? Math.max(12, w / data.length - 10) : 24
+    return (
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-56 block">
+        <g transform={`translate(${padding.left},${padding.top})`}>
+          {data.map((d, i) => {
+            const x = i * (bw + 10)
+            const barH = (d.value / maxV) * h
+            const y = h - barH
+            return (
+              <g key={i}>
+                <rect x={x} y={y} width={bw} height={barH} fill="#7C6FF1" rx={4} />
+                <text x={x + bw / 2} y={h + 14} textAnchor="middle" fontSize="10" fill="#cbd5e1">{d.name}</text>
+                <text x={x + bw / 2} y={y - 4} textAnchor="middle" fontSize="10" fill="#ffffff">{d.value}</text>
+              </g>
+            )
+          })}
+        </g>
+      </svg>
+    )
+  }
 
   if (loading) return <div className="text-white">Loading...</div>
   if (error) return <div className="text-red-400">{error}</div>
@@ -148,9 +321,58 @@ const Overview: React.FC = () => {
             <span className="rounded-md border border-white/10 px-3 py-1.5 bg-white/5 text-white/90">Repairs: {data.repairsCount}</span>
             <span className="rounded-md border border-white/10 px-3 py-1.5 bg-white/5 text-white/90">Customers: {data.customersCount}</span>
             <span className="rounded-md border border-white/10 px-3 py-1.5 bg-white/5 text-white/90">Technicians: {data.techniciansCount}</span>
+            <span className="rounded-md border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 text-emerald-300">Tech Online: {onlineTechs.length}</span>
           </div>
         </div>
       </section>
+
+      {/* Quick Actions */}
+      <section className="rounded-xl border border-white/10 bg-[#12151d] p-4">
+        <h2 className="text-lg font-semibold text-white mb-3">Quick Actions</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {/* Assign Task */}
+          <div onClick={goAssign} role="button" tabIndex={0}
+               onKeyDown={(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); goAssign() } }}
+               className="group rounded-xl border border-[#7C6FF1]/30 bg-[#7C6FF1]/5 p-4 cursor-pointer hover:bg-[#7C6FF1]/10 focus:outline-none focus:ring-2 focus:ring-[#7C6FF1]/50">
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="text-sm font-semibold text-white">Assign Task</div>
+                <div className="text-xs text-slate-300 mt-1">Assign a repair to a technician</div>
+              </div>
+              <span className="text-[#7C6FF1]">↗</span>
+            </div>
+          </div>
+
+          {/* Create Invoice */}
+          <div onClick={goInvoice} role="button" tabIndex={0}
+               onKeyDown={(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); goInvoice() } }}
+               className="group rounded-xl border border-sky-400/30 bg-sky-400/5 p-4 cursor-pointer hover:bg-sky-400/10 focus:outline-none focus:ring-2 focus:ring-sky-400/50">
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="text-sm font-semibold text-white">Create Invoice</div>
+                <div className="text-xs text-slate-300 mt-1">Generate invoice for a repair</div>
+              </div>
+              <span className="text-sky-300">↗</span>
+            </div>
+          </div>
+
+          {/* New Technician */}
+          <div onClick={goTechnicians} role="button" tabIndex={0}
+               onKeyDown={(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); goTechnicians() } }}
+               className="group rounded-xl border border-white/10 bg-white/5 p-4 cursor-pointer hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/30">
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="text-sm font-semibold text-white">New Technician</div>
+                <div className="text-xs text-slate-300 mt-1">Create or manage technician profiles</div>
+              </div>
+              <span className="text-white">↗</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Quick Actions are now navigational cards; modals removed */}
+
       
 
       
@@ -225,6 +447,62 @@ const Overview: React.FC = () => {
             <p className="text-3xl font-bold text-white">{data.repairsCount}</p>
           </div>
         </div>
+      </section>
+
+      {/* My Repair Orders - desktop, placed after chart to match customer */}
+      {/* Live Technician Status */}
+      <section className="rounded-xl border border-white/10 bg-[#12151d] p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-white">Technician Availability</h2>
+          <div className="flex items-center gap-3 text-xs text-slate-300">
+            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-400 inline-block" /> Online / Idle</span>
+            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-400 inline-block" /> On Job</span>
+            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-500 inline-block" /> Offline</span>
+          </div>
+        </div>
+        {techStatus.length === 0 ? (
+          <div className="text-slate-300 text-sm">No technicians to display.</div>
+        ) : (
+          (() => {
+            const active = techStatus.filter(t => t.online)
+            if (active.length === 0) {
+              return <div className="text-slate-300 text-sm">No technicians are online right now.</div>
+            }
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {active.map(t => {
+                  const color = !t.online ? 'bg-slate-500' : (t.onJob ? 'bg-amber-400' : 'bg-emerald-400')
+                  const label = !t.online ? 'Offline' : (t.onJob ? 'On Job' : 'Idle')
+                  return (
+                    <div key={t.id} className="rounded-lg border border-white/10 p-3">
+                      <div className="flex items-center justify-between">
+                        <div className="min-w-0">
+                          <div className="text-white text-sm truncate" title={t.name}>{t.name}</div>
+                          <div className="text-xs text-slate-400">ID: {t.id}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-block h-2.5 w-2.5 rounded-full ${color}`} />
+                          <span className="text-xs text-slate-300">{label}</span>
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xs text-slate-300 space-y-1">
+                        {t.mobile ? <div><span className="text-slate-400">Mobile:</span> {t.mobile}</div> : null}
+                        {t.address ? <div><span className="text-slate-400">Address:</span> {t.address}</div> : null}
+                        {t.stats ? (
+                          <div className="flex gap-3">
+                            <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-slate-500 inline-block" /> Total: {t.stats.totalAssigned}</span>
+                            <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-amber-400 inline-block" /> In Progress: {t.stats.inProgress}</span>
+                            <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400 inline-block" /> Completed: {t.stats.completed}</span>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })()
+        )}
       </section>
 
       {/* My Repair Orders - desktop, placed after chart to match customer */}

@@ -11,7 +11,7 @@ export const api = axios.create({
 
 // Attach token from localStorage if present
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const token = localStorage.getItem('auth_token')
+  const token = localStorage.getItem('auth_token') || localStorage.getItem('token')
   if (token) {
     if (typeof config.headers?.set === 'function') {
       config.headers.set('Authorization', `Bearer ${token}`)

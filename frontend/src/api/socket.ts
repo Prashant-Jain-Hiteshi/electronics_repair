@@ -8,8 +8,18 @@ export function getSocket(): Socket | null {
 
 export function connectSocket(token: string) {
   const url = (import.meta as any).env.VITE_SOCKET_URL as string | undefined
-  const apiUrl = (import.meta as any).env.VITE_API_BASE_URL as string
-  const base = url || apiUrl || ''
+  const apiUrl = (import.meta as any).env.VITE_API_BASE_URL as string | undefined
+  // Prefer explicit socket URL; otherwise, derive origin from API base (strip path like /api)
+  let base = url || ''
+  if (!base && apiUrl) {
+    try {
+      const u = new URL(apiUrl)
+      base = `${u.protocol}//${u.hostname}${u.port ? ':' + u.port : ''}`
+    } catch {
+      // fallback: remove trailing /api if present
+      base = apiUrl.replace(/\/?api\/?$/i, '')
+    }
+  }
   socket = io(base, {
     // Let Socket.IO choose best transport (polling -> websocket upgrade)
     auth: { token },

@@ -6,6 +6,7 @@ import customersRoutes from './routes/customers.routes';
 import inventoryRoutes from './routes/inventory.routes';
 import repairsRoutes from './routes/repairs.routes';
 import paymentsRoutes from './routes/payments.routes';
+import analyticsRoutes from './routes/analytics.routes';
 import path from 'path';
 import { Request, Response } from 'express';
 
@@ -38,6 +39,7 @@ app.use('/api/customers', customersRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/repairs', repairsRoutes);
 app.use('/api/payments', paymentsRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // Static: serve uploaded files
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { api, type ApiError } from '@/api/client'
 
 export type Repair = {
@@ -93,11 +93,18 @@ const Repairs: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [q, setQ] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'' | 'pending' | 'completed'>('')
+  const [priorityFilter, setPriorityFilter] = useState<'' | 'high'>('')
 
   const [technicians, setTechnicians] = useState<Technician[]>([])
   const [assigning, setAssigning] = useState<string | null>(null) // repair id being assigned
   const [assignChoice, setAssignChoice] = useState<Record<string, string>>({}) // repairId -> technicianId
   const [openMenu, setOpenMenu] = useState<string | null>(null) // kebab dropdown by repair id
+  // contextual quick action handling
+  const location = useLocation()
+  const navigate = useNavigate()
+  const [actionParam, setActionParam] = useState<string | null>(null)
+  const [actionRepairId, setActionRepairId] = useState('')
 
   // Modal state (replaces browser alert/confirm)
   type ModalState =
@@ -114,11 +121,15 @@ const Repairs: React.FC = () => {
   ), [])
   const [editStatus, setEditStatus] = useState<Record<string, string>>({}) // repairId -> status
 
-  async function load() {
+  async function load(params?: { q?: string; status?: string; priority?: string }) {
     setLoading(true)
     setError(null)
     try {
-      const res = await api.get('/repairs')
+      const res = await api.get('/repairs', { params: {
+        q: params?.q || undefined,
+        status: params?.status || undefined,
+        priority: params?.priority || undefined,
+      } })
       setRows(res.data.repairs || [])
     } catch (e: any) {
       const err = (e?.response?.data as ApiError) || {}
@@ -136,6 +147,43 @@ const Repairs: React.FC = () => {
   }
 
   useEffect(() => { load(); loadTechs() }, [])
+
+  // Debounced querying for smooth UX when search/filter changes
+  useEffect(() => {
+    const h = setTimeout(() => {
+      const status = statusFilter || undefined
+      const priority = priorityFilter || undefined
+      const query = q.trim() || undefined
+      load({ q: query, status, priority })
+    }, 300)
+    return () => clearTimeout(h)
+  }, [q, statusFilter, priorityFilter])
+
+  // parse action query param from navigation
+  useEffect(() => {
+    const sp = new URLSearchParams(location.search)
+    const a = sp.get('action')
+    if (a === 'assign' || a === 'invoice') setActionParam(a)
+    else setActionParam(null)
+  }, [location.search])
+
+  const clearAction = () => {
+    const sp = new URLSearchParams(location.search)
+    sp.delete('action')
+    navigate({ pathname: location.pathname, search: sp.toString() ? `?${sp.toString()}` : '' }, { replace: true })
+    setActionParam(null)
+    setActionRepairId('')
+  }
+
+  const goToRepair = () => {
+    if (!actionRepairId) return
+    setQ(actionRepairId)
+  }
+
+  const openInvoiceById = () => {
+    if (!actionRepairId) return
+    handleInvoice(actionRepairId)
+  }
 
   async function handleAssign(repairId: string) {
     const techId = assignChoice[repairId]
@@ -214,14 +262,83 @@ const Repairs: React.FC = () => {
       </div>
       {error && <div className="text-red-400 text-sm">{error}</div>}
       {success && <div className="text-emerald-400 text-sm">{success}</div>}
+      {/* Contextual helper from Quick Actions */}
+      {actionParam && (
+        <div className="rounded-xl border border-white/10 bg-white/5 p-3 flex flex-col sm:flex-row sm:items-end gap-2">
+          <div className="flex-1">
+            <div className="text-sm font-medium text-white">
+              {actionParam === 'assign' ? 'Assign a repair to a technician' : 'Generate a repair invoice'}
+            </div>
+            <label className="block text-xs text-slate-300 mt-1">
+              Repair ID
+              <input
+                className="mt-1 w-full rounded-md bg-[#0f1218] border border-white/10 px-3 py-2 text-white outline-none focus:border-[#A48AFB]"
+                placeholder="Paste or type the Repair ID"
+                value={actionRepairId}
+                onChange={(e)=>setActionRepairId(e.target.value)}
+              />
+            </label>
+          </div>
+          <div className="flex gap-2">
+            {actionParam === 'assign' ? (
+              <button
+                onClick={goToRepair}
+                className="px-3 py-2 rounded-md text-sm border border-[#A48AFB]/30 bg-[#A48AFB]/10 text-[#A48AFB] hover:bg-[#A48AFB]/20"
+              >Find Repair</button>
+            ) : (
+              <button
+                onClick={openInvoiceById}
+                className="px-3 py-2 rounded-md text-sm border border-sky-400/30 bg-sky-400/10 text-sky-300 hover:bg-sky-400/20"
+              >Open Invoice</button>
+            )}
+            <button
+              onClick={clearAction}
+              className="px-3 py-2 rounded-md text-sm border border-white/10 text-white hover:bg-white/10"
+            >Clear</button>
+          </div>
+        </div>
+      )}
       {/* Search repairs */}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <input
-          className="border border-[#A48AFB] bg-[#0f1218] text-white placeholder-slate-400 rounded-md p-2 text-sm w-full max-w-xs focus:outline-none focus:ring-2 focus:ring-[#A48AFB] focus:border-[#A48AFB] hover:border-[#A48AFB]/50 transition-colors"
-          placeholder="Search repairs..."
+          className="border border-[#A48AFB] bg-[#0f1218] text-white placeholder-slate-400 rounded-md p-2 text-sm w-full sm:max-w-xs focus:outline-none focus:ring-2 focus:ring-[#A48AFB] focus:border-[#A48AFB] hover:border-[#A48AFB]/50 transition-colors"
+          placeholder="Search by ID, customer name, or device type..."
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
+        <div className="flex flex-wrap gap-2">
+          {/* Status quick filters */}
+          <div className="inline-flex rounded-lg overflow-hidden border border-white/10">
+            <button
+              className={`px-3 py-2 text-sm ${statusFilter === '' ? 'bg-white/10 text-white' : 'bg-[#0f1218] text-slate-300 hover:bg-white/5'}`}
+              onClick={() => setStatusFilter('')}
+              aria-pressed={statusFilter === ''}
+            >All Status</button>
+            <button
+              className={`px-3 py-2 text-sm border-l border-white/10 ${statusFilter === 'pending' ? 'bg-white/10 text-white' : 'bg-[#0f1218] text-slate-300 hover:bg-white/5'}`}
+              onClick={() => setStatusFilter('pending')}
+              aria-pressed={statusFilter === 'pending'}
+            >Pending</button>
+            <button
+              className={`px-3 py-2 text-sm border-l border-white/10 ${statusFilter === 'completed' ? 'bg-white/10 text-white' : 'bg-[#0f1218] text-slate-300 hover:bg-white/5'}`}
+              onClick={() => setStatusFilter('completed')}
+              aria-pressed={statusFilter === 'completed'}
+            >Completed</button>
+          </div>
+          {/* Priority filter */}
+          <div className="inline-flex rounded-lg overflow-hidden border border-white/10">
+            <button
+              className={`px-3 py-2 text-sm ${priorityFilter === '' ? 'bg-white/10 text-white' : 'bg-[#0f1218] text-slate-300 hover:bg-white/5'}`}
+              onClick={() => setPriorityFilter('')}
+              aria-pressed={priorityFilter === ''}
+            >All Priority</button>
+            <button
+              className={`px-3 py-2 text-sm border-l border-white/10 ${priorityFilter === 'high' ? 'bg-white/10 text-white' : 'bg-[#0f1218] text-slate-300 hover:bg-white/5'}`}
+              onClick={() => setPriorityFilter('high')}
+              aria-pressed={priorityFilter === 'high'}
+            >High Priority</button>
+          </div>
+        </div>
       </div>
       {loading ? (
         <div className="text-white">Loading...</div>
@@ -238,24 +355,7 @@ const Repairs: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {rows
-                .filter((r) => {
-                  const s = q.trim().toLowerCase()
-                  if (!s) return true
-                  const hay = [
-                    r.id,
-                    r.deviceType,
-                    r.brand,
-                    r.model,
-                    r.status,
-                    r.priority,
-                  ]
-                    .filter(Boolean)
-                    .join(' ')
-                    .toLowerCase()
-                  return hay.includes(s)
-                })
-                .map((r, idx) => (
+              {rows.map((r, idx) => (
                 <tr key={r.id} className={idx % 2 === 0 ? 'border-t border-white/10' : 'border-t border-white/10 hover:bg-white/5'}>
                   <td className="py-2 px-3 font-mono text-xs">{r.id}</td>
                   <td className="py-2 px-3">{r.deviceType} • {r.brand} {r.model}</td>

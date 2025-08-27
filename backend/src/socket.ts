@@ -3,6 +3,8 @@ import { Server as HTTPServer } from 'http';
 import jwt from 'jsonwebtoken';
 
 let io: IOServer | null = null;
+// Track online technicians by their userId
+const onlineTechnicians = new Set<string>();
 
 export function initSocket(server: HTTPServer) {
   io = new IOServer(server, {
@@ -37,6 +39,12 @@ export function initSocket(server: HTTPServer) {
         socket.join(`role:${role}`);
       }
 
+      // If technician, mark online
+      if (role === 'technician' && userId) {
+        onlineTechnicians.add(userId);
+        try { io?.to('role:admin').emit('technician:status', { userId, online: true }); } catch {}
+      }
+
       // Debug: log successful connection
       try {
         console.log(`[socket] connected sid=${socket.id} userId=${userId}`);
@@ -45,6 +53,13 @@ export function initSocket(server: HTTPServer) {
       socket.emit('socket:ready', { ok: true });
 
       socket.on('disconnect', () => {
+        // Mark technician offline if applicable
+        try {
+          if (role === 'technician' && userId && onlineTechnicians.has(userId)) {
+            onlineTechnicians.delete(userId);
+            io?.to('role:admin').emit('technician:status', { userId, online: false });
+          }
+        } catch {}
         // Debug: log disconnect
         try {
           console.log(`[socket] disconnected sid=${socket.id}`);
@@ -78,5 +93,9 @@ export function emitToRole(role: string, event: string, payload: any) {
     console.log(`[socket] emit to role:${role} event=${event} payloadKeys=${Object.keys(payload || {}).join(',')}`);
   } catch {}
   io.to(`role:${role}`).emit(event, payload);
+}
+
+export function getOnlineTechnicians() {
+  return onlineTechnicians;
 }
 

@@ -44,6 +44,14 @@ const IconCard = () => (
     <path d="M2 10h20" />
   </svg>
 )
+const IconChart = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M3 3v18h18" />
+    <rect x="6" y="12" width="3" height="6" rx="1" />
+    <rect x="11" y="9" width="3" height="9" rx="1" />
+    <rect x="16" y="6" width="3" height="12" rx="1" />
+  </svg>
+)
 
 const navItems = [
   { to: '/admin', label: 'Overview', Icon: IconDashboard },
@@ -52,13 +60,14 @@ const navItems = [
   { to: '/admin/repairs', label: 'Repairs', Icon: IconClipboard },
   { to: '/admin/inventory', label: 'Inventory', Icon: IconBoxes },
   { to: '/admin/payments', label: 'Payments', Icon: IconCard },
+  { to: '/admin/analytics', label: 'Analytics', Icon: IconChart },
 ]
 
 const AdminShell: React.FC = () => {
   const { user, logout } = useAuth()
   const [open, setOpen] = useState(false)
   const [confirmLogout, setConfirmLogout] = useState(false)
-  const visibleNavItems = navItems.filter(i => i.to !== '/admin/inventory' && i.to !== '/admin/payments')
+  const visibleNavItems = navItems
 
   const base = (import.meta as any)?.env?.BASE_URL || '/'
 

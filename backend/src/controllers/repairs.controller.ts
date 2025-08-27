@@ -12,11 +12,67 @@ import { buildRepairInvoiceHTML, InvoiceTotals } from '../utils/invoice';
 import User, { UserRole } from '../models/User';
 import RepairAttachment from '../models/RepairAttachment';
 import { emitToUser, emitToRole } from '../socket';
+import InventoryUsage from '../models/InventoryUsage';
+import { Op, WhereOptions, col, fn, literal, where as sqlWhere } from 'sequelize';
 
 // Technician/Admin: list all repair orders
-export async function listAllRepairs(_req: AuthRequest, res: Response) {
+export async function listAllRepairs(req: AuthRequest, res: Response) {
   try {
-    const repairs = await RepairOrder.findAll({ order: [['createdAt', 'DESC']] as any });
+    const { q, status, priority } = (req.query || {}) as Record<string, string | undefined>;
+
+    const where: WhereOptions = {};
+
+    // Status filter
+    if (status && Object.values(RepairStatus).includes(status as RepairStatus)) {
+      (where as any).status = status;
+    }
+    // Priority filter
+    if (priority && Object.values(Priority).includes(priority as Priority)) {
+      (where as any).priority = priority;
+    }
+
+    // Build search across id, device fields, and optionally by customer full name
+    let customerIdsFromName: string[] = [];
+    if (q && q.trim()) {
+      const s = q.trim();
+      // If searching by customer name: find Users whose first+last like q, map to Customers
+      try {
+        const users = await User.findAll({
+          where: {
+            [Op.or]: [
+              // firstName || lastName contains
+              { firstName: { [Op.iLike as any]: `%${s}%` } as any },
+              { lastName: { [Op.iLike as any]: `%${s}%` } as any },
+              // full name match (concat)
+              sqlWhere(fn('LOWER', fn('CONCAT', col('firstName'), literal("' '"), col('lastName'))), {
+                [Op.like]: `%${s.toLowerCase()}%`,
+              }) as any,
+            ],
+          } as any,
+          attributes: ['id'],
+        });
+        if (users.length) {
+          const uids = users.map((u: any) => u.id);
+          const customers = await Customer.findAll({ where: { userId: { [Op.in]: uids } as any } as any, attributes: ['id'] });
+          customerIdsFromName = customers.map((c: any) => c.id);
+        }
+      } catch (e) {
+        // ignore name search errors, fall back to other fields
+      }
+
+      // Compose OR conditions across columns we own
+      (where as any)[Op.or] = [
+        { id: s }, // exact id match
+        { deviceType: { [Op.iLike as any]: `%${s}%` } as any },
+        { brand: { [Op.iLike as any]: `%${s}%` } as any },
+        { model: { [Op.iLike as any]: `%${s}%` } as any },
+      ];
+      if (customerIdsFromName.length) {
+        (where as any)[Op.or].push({ customerId: { [Op.in]: customerIdsFromName } as any });
+      }
+    }
+
+    const repairs = await RepairOrder.findAll({ where, order: [['createdAt', 'DESC']] as any });
     return res.status(200).json({ repairs });
   } catch (err) {
     console.error('List repairs error:', err);
@@ -380,6 +436,40 @@ export async function addRepairPart(req: Request, res: Response) {
     inv.quantity = inv.quantity - Number(quantity);
     await inv.save({ transaction: t });
 
+    // Log usage
+    try {
+      const reqAny = req as any;
+      await InventoryUsage.create(
+        {
+          inventoryId,
+          repairOrderId: id,
+          quantityChange: -Math.abs(Number(quantity)),
+          reason: 'usage',
+          createdBy: reqAny?.user?.id || null,
+          note: `Used on repair ${id}`,
+        },
+        { transaction: t }
+      );
+    } catch (usageErr) {
+      // non-fatal
+      console.error('Failed to log inventory usage (add):', usageErr);
+    }
+
+    // Emit low stock alert if needed
+    try {
+      if (inv.quantity <= inv.minStockLevel) {
+        emitToRole('admin', 'inventory:low', {
+          id: inv.id,
+          partName: (inv as any).partName,
+          partNumber: (inv as any).partNumber,
+          quantity: inv.quantity,
+          minStockLevel: inv.minStockLevel,
+        });
+      }
+    } catch (emitErr) {
+      console.error('Failed to emit low stock alert:', emitErr);
+    }
+
     await t.commit();
     return res.status(201).json({ part: rp });
   } catch (err) {
@@ -404,6 +494,24 @@ export async function removeRepairPart(req: Request, res: Response) {
     if (inv) {
       inv.quantity = inv.quantity + Number(part.quantity || 0);
       await inv.save({ transaction: t });
+
+      // Log reversal
+      try {
+        const reqAny = req as any;
+        await InventoryUsage.create(
+          {
+            inventoryId: String(part.inventoryId),
+            repairOrderId: id,
+            quantityChange: Math.abs(Number(part.quantity || 0)),
+            reason: 'reversal',
+            createdBy: reqAny?.user?.id || null,
+            note: `Removed from repair ${id}`,
+          },
+          { transaction: t }
+        );
+      } catch (usageErr) {
+        console.error('Failed to log inventory usage (remove):', usageErr);
+      }
     }
 
     await part.destroy({ transaction: t });
