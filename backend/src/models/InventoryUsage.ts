@@ -43,7 +43,15 @@ InventoryUsage.init(
     note: { type: DataTypes.TEXT, allowNull: true },
     createdBy: { type: DataTypes.UUID, allowNull: true },
   },
-  { sequelize, modelName: 'InventoryUsage', tableName: 'inventory_usage', timestamps: true }
+  { 
+    sequelize, 
+    modelName: 'InventoryUsage', 
+    tableName: 'inventory_usage', 
+    timestamps: true,
+    indexes: [
+      { name: 'idx_inventory_usage_repair_order', fields: ['repairOrderId'] },
+    ],
+  }
 )
 
 export default InventoryUsage

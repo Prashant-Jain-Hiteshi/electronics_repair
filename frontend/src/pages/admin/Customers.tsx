@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { api, type ApiError } from '@/api/client'
+import FormInput from '@/components/common/FormInput'
+import Toast from '@/components/common/Toast'
+import ConfirmDialog from '@/components/common/ConfirmDialog'
 
 type Customer = {
   id: string
@@ -38,6 +41,8 @@ const Customers: React.FC = () => {
   const [form, setForm] = useState({ mobile: '', firstName: '', lastName: '', address: '' })
   const [formErrors, setFormErrors] = useState<{ firstName?: string; lastName?: string; mobile?: string }>({})
   const [q, setQ] = useState('')
+  const [success, setSuccess] = useState<string | null>(null)
+  const [confirm, setConfirm] = useState<{ open: boolean; id?: string; name?: string }>({ open: false })
 
   async function load() {
     setLoading(true)
@@ -86,13 +91,13 @@ const Customers: React.FC = () => {
   }
 
   async function handleDeactivate(customerId: string) {
-    if (!confirm('Deactivate this customer?')) return
     try {
       await api.delete(`/customers/${customerId}`)
+      setSuccess('Customer deactivated')
       await load()
     } catch (e: any) {
       const err = (e?.response?.data as ApiError) || {}
-      alert(err.message || 'Failed to deactivate customer')
+      setError(err.message || 'Failed to deactivate customer')
     }
   }
 
@@ -102,14 +107,15 @@ const Customers: React.FC = () => {
         <h1 className="text-xl font-semibold text-white">Customers</h1>
         <button className="btn" onClick={() => setFormOpen(true)}>New Customer</button>
       </div>
-      {error && <div className="text-red-400 text-sm">{error}</div>}
+      {error && <Toast kind="error" onClose={() => setError(null)} autoHideMs={5000}>{error}</Toast>}
+      {success && <Toast kind="success" onClose={() => setSuccess(null)} autoHideMs={4000}>{success}</Toast>}
       {/* Search */}
       <div className="flex items-center justify-between gap-3">
-        <input
-          className="border  border-[#A48AFB] bg-[#0f1218] text-white placeholder-slate-400 rounded-md p-2 text-sm w-full max-w-xs focus:outline-none focus:ring-2 focus:ring-[#A48AFB] focus:border-[#A48AFB] hover:border-[#A48AFB]/50 transition-colors"
+        <FormInput
           placeholder="Search customers..."
           value={q}
-          onChange={(e) => setQ(e.target.value)}
+          onChange={(e) => setQ(e.currentTarget.value)}
+          className="w-full max-w-xs"
         />
       </div>
       {loading ? (
@@ -148,7 +154,7 @@ const Customers: React.FC = () => {
                   <td className="p-2">{r.user ? `${r.user.firstName} ${r.user.lastName}` : '-'}</td>
                   <td className="p-2">{r.user?.phone || '-'}</td>
                   <td className="p-2">
-                    <button className="btn btn-sm" onClick={() => handleDeactivate(r.id)}>Deactivate</button>
+                    <button className="btn btn-sm" onClick={() => setConfirm({ open: true, id: r.id, name: r.user ? `${r.user.firstName} ${r.user.lastName}` : 'this customer' })}>Deactivate</button>
                   </td>
                 </tr>
               ))}
@@ -166,39 +172,30 @@ const Customers: React.FC = () => {
             </div>
             <form className="p-4 space-y-3" onSubmit={handleCreate}>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-slate-300 mb-1">First Name</label>
-                  <input
-                    className={`input border-white/10 bg-[#0f1218] text-white ${formErrors.firstName ? 'ring-2 ring-red-500 border-red-500' : ''}`}
-                    value={form.firstName}
-                    onChange={(e)=>{ setForm({...form, firstName: e.target.value}); if (formErrors.firstName) setFormErrors(prev=>({ ...prev, firstName: undefined })) }}
-                  />
-                  {formErrors.firstName && <p className="mt-1 text-xs text-red-400">{formErrors.firstName}</p>}
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-300 mb-1">Last Name</label>
-                  <input
-                    className={`input border-white/10 bg-[#0f1218] text-white ${formErrors.lastName ? 'ring-2 ring-red-500 border-red-500' : ''}`}
-                    value={form.lastName}
-                    onChange={(e)=>{ setForm({...form, lastName: e.target.value}); if (formErrors.lastName) setFormErrors(prev=>({ ...prev, lastName: undefined })) }}
-                  />
-                  {formErrors.lastName && <p className="mt-1 text-xs text-red-400">{formErrors.lastName}</p>}
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-300 mb-1">Mobile</label>
-                  <input
-                    className={`input border-white/10 bg-[#0f1218] text-white ${formErrors.mobile ? 'ring-2 ring-red-500 border-red-500' : ''}`}
-                    placeholder="10-digit mobile"
-                    value={form.mobile}
-                    onChange={(e)=>{ setForm({...form, mobile: e.target.value}); if (formErrors.mobile) setFormErrors(prev=>({ ...prev, mobile: undefined })) }}
-                  />
-                  {formErrors.mobile && <p className="mt-1 text-xs text-red-400">{formErrors.mobile}</p>}
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-300 mb-1">Address</label>
-                  <input className="input border-white/10 bg-[#0f1218] text-white" value={form.address} onChange={(e)=>setForm({...form, address: e.target.value})} />
-                </div>
-                {/* <div className="col-span-2 text-xs text-slate-400">Mobile is mandatory. Email/password are not required.</div> */}
+                <FormInput
+                  label="First Name"
+                  value={form.firstName}
+                  onChange={(e)=>{ setForm({...form, firstName: e.currentTarget.value}); if (formErrors.firstName) setFormErrors(prev=>({ ...prev, firstName: undefined })) }}
+                  error={formErrors.firstName}
+                />
+                <FormInput
+                  label="Last Name"
+                  value={form.lastName}
+                  onChange={(e)=>{ setForm({...form, lastName: e.currentTarget.value}); if (formErrors.lastName) setFormErrors(prev=>({ ...prev, lastName: undefined })) }}
+                  error={formErrors.lastName}
+                />
+                <FormInput
+                  label="Mobile"
+                  placeholder="10-digit mobile"
+                  value={form.mobile}
+                  onChange={(e)=>{ setForm({...form, mobile: e.currentTarget.value}); if (formErrors.mobile) setFormErrors(prev=>({ ...prev, mobile: undefined })) }}
+                  error={formErrors.mobile}
+                />
+                <FormInput
+                  label="Address"
+                  value={form.address}
+                  onChange={(e)=>setForm({...form, address: e.currentTarget.value})}
+                />
               </div>
               <div className="flex items-center justify-end gap-2 border-t border-white/10 mt-2 pt-4">
                 <button type="button" className="btn-outline" onClick={()=>setFormOpen(false)}>Cancel</button>
@@ -208,6 +205,19 @@ const Customers: React.FC = () => {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirm.open}
+        title="Deactivate customer?"
+        message={`This will deactivate ${confirm.name || 'this customer'}.`}
+        confirmText="Deactivate"
+        onCancel={() => setConfirm({ open: false })}
+        onConfirm={async () => {
+          if (!confirm.id) return
+          await handleDeactivate(confirm.id)
+          setConfirm({ open: false })
+        }}
+      />
     </div>
   )
 }

@@ -6,8 +6,12 @@ import {
   listMyPayments,
   listTechnicianPayments,
   createPayment,
-  
   listPaymentsForRepair,
+  createPaymentIntent,
+  confirmPaymentIntent,
+  cancelPaymentIntent,
+  refundPayment,
+  getInvoiceForRepair,
 } from '../controllers/payments.controller';
 import { handleValidation } from '../middleware/validate';
 
@@ -40,6 +44,59 @@ router.post(
   ],
   handleValidation,
   createPayment
+);
+
+// Payment Intent: create
+router.post(
+  '/intents',
+  requireAuth,
+  requireRole(['admin', 'technician', 'customer']),
+  [
+    body('repairOrderId').isString(),
+    body('amount').isFloat({ gt: 0 }),
+    body('method').isIn(['cash', 'card', 'upi', 'bank_transfer']),
+    body('provider').optional().isIn(['manual', 'stripe', 'upi']),
+    body('kind').optional().isIn(['deposit', 'partial', 'final', 'refund']),
+    body('currencyCode').optional().isString(),
+  ],
+  handleValidation,
+  createPaymentIntent
+);
+
+// Payment Intent: confirm
+router.post(
+  '/intents/:id/confirm',
+  requireAuth,
+  requireRole(['admin', 'technician', 'customer']),
+  [body('transactionId').optional().isString()],
+  handleValidation,
+  confirmPaymentIntent
+);
+
+// Payment Intent: cancel
+router.post(
+  '/intents/:id/cancel',
+  requireAuth,
+  requireRole(['admin', 'technician', 'customer']),
+  cancelPaymentIntent
+);
+
+// Refund a payment (admin only)
+router.post(
+  '/:id/refund',
+  requireAuth,
+  requireRole(['admin']),
+  [body('amount').optional().isFloat({ gt: 0 }), body('notes').optional().isString()],
+  handleValidation,
+  refundPayment
+);
+
+// Generate invoice for a repair order
+router.get(
+  '/invoice/repair/:id',
+  requireAuth,
+  requireRole(['admin', 'technician', 'customer']),
+  getInvoiceForRepair
 );
 
 export default router;

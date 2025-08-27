@@ -3,6 +3,7 @@ import sequelize from '../config/database';
 
 interface InventoryAttributes {
   id: string;
+  sku?: string;
   partName: string;
   partNumber: string;
   description?: string;
@@ -27,6 +28,7 @@ class Inventory
   implements InventoryAttributes
 {
   public id!: string;
+  public sku?: string | undefined;
   public partName!: string;
   public partNumber!: string;
   public description?: string | undefined;
@@ -46,6 +48,7 @@ class Inventory
 Inventory.init(
   {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    sku: { type: DataTypes.STRING, allowNull: true, unique: true },
     partName: { type: DataTypes.STRING, allowNull: false },
     partNumber: { type: DataTypes.STRING, allowNull: false, unique: true },
     description: { type: DataTypes.TEXT, allowNull: true },
@@ -59,7 +62,22 @@ Inventory.init(
     location: { type: DataTypes.STRING, allowNull: true },
     isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
   },
-  { sequelize, modelName: 'Inventory', tableName: 'inventory', timestamps: true }
+  { 
+    sequelize, 
+    modelName: 'Inventory', 
+    tableName: 'inventory', 
+    timestamps: true,
+    hooks: {
+      beforeValidate: (instance: any) => {
+        if (!instance.sku && instance.partNumber) {
+          instance.sku = String(instance.partNumber).trim().toUpperCase()
+        }
+      },
+    },
+    indexes: [
+      { name: 'idx_inventory_sku', fields: ['sku'] },
+    ],
+  }
 );
 
 export default Inventory;

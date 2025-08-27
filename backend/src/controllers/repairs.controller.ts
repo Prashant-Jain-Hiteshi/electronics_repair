@@ -11,14 +11,17 @@ import sequelize from '../config/database';
 import { buildRepairInvoiceHTML, InvoiceTotals } from '../utils/invoice';
 import User, { UserRole } from '../models/User';
 import RepairAttachment from '../models/RepairAttachment';
+import Estimate from '../models/Estimate';
 import { emitToUser, emitToRole } from '../socket';
 import InventoryUsage from '../models/InventoryUsage';
 import { Op, WhereOptions, col, fn, literal, where as sqlWhere } from 'sequelize';
+import TechnicianProfile from '../models/TechnicianProfile';
+import TechnicianSchedule from '../models/TechnicianSchedule';
 
 // Technician/Admin: list all repair orders
 export async function listAllRepairs(req: AuthRequest, res: Response) {
   try {
-    const { q, status, priority } = (req.query || {}) as Record<string, string | undefined>;
+    const { q, status, priority, page = '1', pageSize = '20', sort = 'createdAt', direction = 'desc' } = (req.query || {}) as Record<string, string | undefined>;
 
     const where: WhereOptions = {};
 
@@ -72,8 +75,24 @@ export async function listAllRepairs(req: AuthRequest, res: Response) {
       }
     }
 
-    const repairs = await RepairOrder.findAll({ where, order: [['createdAt', 'DESC']] as any });
-    return res.status(200).json({ repairs });
+    const validSort = ['createdAt', 'updatedAt', 'status', 'priority'];
+    const sortCol = validSort.includes(String(sort)) ? String(sort) : 'createdAt';
+    const dir = String(direction || 'desc').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    const p = Math.max(1, Number(page) || 1);
+    const ps = Math.min(100, Math.max(1, Number(pageSize) || 20));
+    const offset = (p - 1) * ps;
+
+    const { rows, count } = await (RepairOrder as any).findAndCountAll({ where, order: [[sortCol, dir]] as any, limit: ps, offset });
+    return res.status(200).json({
+      repairs: rows,
+      total: count,
+      page: p,
+      pageSize: ps,
+      sort: sortCol,
+      direction: dir,
+      q: q || '',
+      filters: { status: status || null, priority: priority || null },
+    });
   } catch (err) {
     console.error('List repairs error:', err);
     return res.status(500).json({ message: 'Internal server error' });
@@ -125,7 +144,13 @@ export async function getRepairById(req: AuthRequest, res: Response) {
         if (user) delete (user as any).password;
       }
     }
-    return res.status(200).json({ repair, customer, user });
+    // Include linked estimate if exists
+    let estimate: any = null;
+    try {
+      estimate = await Estimate.findOne({ where: { repairOrderId: id } as any });
+    } catch {}
+
+    return res.status(200).json({ repair, customer, user, estimate });
   } catch (err) {
     console.error('Get repair by id error:', err);
     return res.status(500).json({ message: 'Internal server error' });
@@ -320,7 +345,7 @@ export async function assignTechnician(req: AuthRequest, res: Response) {
   try {
     if ((req.user as any)?.role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
     const { id } = req.params; // repairOrderId
-    const { technicianId } = req.body || {};
+    const { technicianId, start, end, capacityUnits, requiredSkills } = req.body || {};
     if (!technicianId) return res.status(400).json({ message: 'technicianId is required' });
 
     const repair = await RepairOrder.findByPk(id);
@@ -331,9 +356,72 @@ export async function assignTechnician(req: AuthRequest, res: Response) {
       return res.status(400).json({ message: 'Invalid technicianId' });
     }
 
+    // Optional scheduling validation and assignment creation
+    // Parse window; default to today 9-11 if not provided
+    const startAt = start ? new Date(start) : new Date();
+    const endAt = end ? new Date(end) : new Date(startAt.getTime() + 2 * 3600 * 1000);
+    if (!(startAt instanceof Date) || isNaN(startAt.getTime()) || !(endAt instanceof Date) || isNaN(endAt.getTime())) {
+      return res.status(400).json({ message: 'Invalid start/end datetime' });
+    }
+    if (endAt <= startAt) return res.status(400).json({ message: 'end must be after start' });
+
+    const prof = await TechnicianProfile.findOne({ where: { userId: technicianId } as any });
+    const dailyCap = (prof as any)?.dailyCapacity ?? 8;
+    const skills: string[] = ((prof as any)?.skills || []) as any;
+    if (Array.isArray(requiredSkills) && requiredSkills.length) {
+      const missing = requiredSkills.filter((s: string) => !skills.includes(String(s).toLowerCase()))
+      if (missing.length) {
+        return res.status(400).json({ message: 'Technician lacks required skills', missing });
+      }
+    }
+
+    // Check overlap and capacity for the day
+    const dayStart = new Date(startAt);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+    const existing = await TechnicianSchedule.findAll({
+      where: {
+        technicianId,
+        kind: 'assignment' as any,
+        [Op.or]: [
+          { start: { [Op.between]: [dayStart, dayEnd] } as any },
+          { end: { [Op.between]: [dayStart, dayEnd] } as any },
+          { start: { [Op.lte]: dayStart } as any, end: { [Op.gte]: dayEnd } as any },
+        ],
+      } as any,
+      order: [['start', 'ASC']] as any,
+    });
+
+    // Prevent double-booking same repair overlap for same technician
+    const overlapSameRepair = existing.find(
+      (e: any) => e.repairOrderId === id && !(new Date(e.end) <= startAt || new Date(e.start) >= endAt)
+    );
+    if (overlapSameRepair) {
+      return res.status(409).json({ message: 'Repair already assigned in overlapping window for this technician' });
+    }
+
+    const requestedUnits = Number(capacityUnits ?? 2);
+    const assignedUnits = existing.reduce((sum: number, e: any) => sum + Number(e.capacityUnits || 0), 0);
+    if (assignedUnits + requestedUnits > dailyCap) {
+      return res.status(409).json({ message: 'Capacity exceeded for the day', assignedUnits, requestedUnits, dailyCap });
+    }
+
+    // Save technician on repair and create schedule block
     (repair as any).technicianId = technicianId;
     await repair.save();
-    return res.status(200).json({ repair });
+
+    const sched = await TechnicianSchedule.create({
+      technicianId,
+      kind: 'assignment' as any,
+      start: startAt,
+      end: endAt,
+      repairOrderId: id,
+      capacityUnits: requestedUnits,
+      note: `Assignment for repair ${id}`,
+    } as any);
+
+    return res.status(200).json({ repair, assignment: sched });
   } catch (err) {
     console.error('Assign technician error:', err);
     return res.status(500).json({ message: 'Internal server error' });

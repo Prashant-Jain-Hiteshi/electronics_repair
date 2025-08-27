@@ -21,6 +21,7 @@ interface RepairOrderAttributes {
   id: string;
   customerId: string;
   technicianId?: string;
+  locationId?: string | null;
   deviceType: string;
   brand: string;
   model: string;
@@ -49,6 +50,7 @@ class RepairOrder
   public id!: string;
   public customerId!: string;
   public technicianId?: string | undefined;
+  public locationId?: string | null;
   public deviceType!: string;
   public brand!: string;
   public model!: string;
@@ -80,6 +82,11 @@ RepairOrder.init(
       allowNull: true,
       references: { model: 'users', key: 'id' },
     },
+    locationId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: { model: 'locations', key: 'id' },
+    },
     deviceType: { type: DataTypes.STRING, allowNull: false },
     brand: { type: DataTypes.STRING, allowNull: false },
     model: { type: DataTypes.STRING, allowNull: false },
@@ -103,7 +110,22 @@ RepairOrder.init(
     actualCompletionDate: { type: DataTypes.DATE, allowNull: true },
     warrantyPeriod: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 30 },
   },
-  { sequelize, modelName: 'RepairOrder', tableName: 'repair_orders', timestamps: true }
+  { 
+    sequelize, 
+    modelName: 'RepairOrder', 
+    tableName: 'repair_orders', 
+    timestamps: true,
+    indexes: [
+      {
+        name: 'idx_repair_orders_status_priority_customer',
+        fields: ['status', 'priority', 'customerId'],
+      },
+      {
+        name: 'idx_repair_orders_location',
+        fields: ['locationId'],
+      },
+    ],
+  }
 );
 
 export default RepairOrder;

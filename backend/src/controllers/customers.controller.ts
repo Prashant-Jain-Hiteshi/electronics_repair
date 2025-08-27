@@ -2,17 +2,58 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import Customer from '../models/Customer';
 import User, { UserRole } from '../models/User';
+import { Op, WhereOptions } from 'sequelize';
 
-export async function listAllCustomers(_req: AuthRequest, res: Response) {
+export async function listAllCustomers(req: AuthRequest, res: Response) {
   try {
-    const customers = await Customer.findAll();
-    // Attach minimal user info for admin table display (name + mobile)
-    const userIds = customers.map((c: any) => c.userId).filter(Boolean);
+    const { q, isActive, page = '1', pageSize = '20', sort = 'createdAt', direction = 'desc' } = (req.query || {}) as Record<string, string | undefined>;
+
+    const where: WhereOptions = {};
+
+    // Filter by linked user isActive if provided
+    let userWhere: WhereOptions | undefined;
+    if (isActive != null && isActive !== '') {
+      userWhere = { isActive: String(isActive) === 'true' } as any;
+    }
+
+    // Search across basic fields via associated User fields (name, mobile)
+    let userIdsFromSearch: string[] = [];
+    if (q && q.trim()) {
+      const s = q.trim();
+      const users = await User.findAll({
+        where: {
+          [Op.or]: [
+            { firstName: { [Op.iLike as any]: `%${s}%` } as any },
+            { lastName: { [Op.iLike as any]: `%${s}%` } as any },
+            { mobile: { [Op.iLike as any]: `%${s}%` } as any },
+          ],
+          ...(userWhere || {}),
+        } as any,
+        attributes: ['id'],
+      });
+      userIdsFromSearch = users.map((u: any) => u.id);
+      if (userIdsFromSearch.length === 0) {
+        return res.status(200).json({ customers: [], total: 0, page: 1, pageSize: Number(pageSize) || 20, sort, direction: (direction || 'desc').toUpperCase(), q, filters: { isActive: isActive ?? null } });
+      }
+      (where as any).userId = { [Op.in]: userIdsFromSearch } as any;
+    }
+
+    const validSort = ['createdAt', 'updatedAt'];
+    const sortCol = validSort.includes(String(sort)) ? String(sort) : 'createdAt';
+    const dir = String(direction || 'desc').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    const p = Math.max(1, Number(page) || 1);
+    const ps = Math.min(100, Math.max(1, Number(pageSize) || 20));
+    const offset = (p - 1) * ps;
+
+    const { rows, count } = await (Customer as any).findAndCountAll({ where, order: [[sortCol, dir]] as any, limit: ps, offset });
+
+    // Enrich with minimal user info
+    const userIds = rows.map((c: any) => c.userId).filter(Boolean);
     const uniqueUserIds = Array.from(new Set(userIds));
-    const users = await User.findAll({ where: { id: uniqueUserIds } as any });
+    const users = await User.findAll({ where: { id: uniqueUserIds, ...(userWhere || {}) } as any });
     const userMap = new Map(users.map((u: any) => [u.id, u.toJSON()]));
 
-    const enriched = customers.map((c: any) => ({
+    const enriched = rows.map((c: any) => ({
       ...c.toJSON(),
       user: userMap.get(c.userId)
         ? {
@@ -25,7 +66,16 @@ export async function listAllCustomers(_req: AuthRequest, res: Response) {
         : undefined,
     }));
 
-    return res.status(200).json({ customers: enriched });
+    return res.status(200).json({
+      customers: enriched,
+      total: count,
+      page: p,
+      pageSize: ps,
+      sort: sortCol,
+      direction: dir,
+      q: q || '',
+      filters: { isActive: isActive ?? null },
+    });
   } catch (err) {
     console.error('List customers error:', err);
     return res.status(500).json({ message: 'Internal server error' });

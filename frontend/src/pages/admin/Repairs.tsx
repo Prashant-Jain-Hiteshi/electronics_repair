@@ -1,5 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
+import Toast from '@/components/common/Toast'
+import FormInput from '@/components/common/FormInput'
+import FormSelect from '@/components/common/FormSelect'
+import ConfirmDialog from '@/components/common/ConfirmDialog'
+import Modal from '@/components/common/Modal'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { api, type ApiError } from '@/api/client'
 
@@ -260,8 +265,8 @@ const Repairs: React.FC = () => {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold tracking-tight text-white">Repairs</h1>
       </div>
-      {error && <div className="text-red-400 text-sm">{error}</div>}
-      {success && <div className="text-emerald-400 text-sm">{success}</div>}
+      {error && <Toast kind="error" onClose={() => setError(null)} autoHideMs={5000}>{error}</Toast>}
+      {success && <Toast kind="success" onClose={() => setSuccess(null)} autoHideMs={4000}>{success}</Toast>}
       {/* Contextual helper from Quick Actions */}
       {actionParam && (
         <div className="rounded-xl border border-white/10 bg-white/5 p-3 flex flex-col sm:flex-row sm:items-end gap-2">
@@ -269,15 +274,9 @@ const Repairs: React.FC = () => {
             <div className="text-sm font-medium text-white">
               {actionParam === 'assign' ? 'Assign a repair to a technician' : 'Generate a repair invoice'}
             </div>
-            <label className="block text-xs text-slate-300 mt-1">
-              Repair ID
-              <input
-                className="mt-1 w-full rounded-md bg-[#0f1218] border border-white/10 px-3 py-2 text-white outline-none focus:border-[#A48AFB]"
-                placeholder="Paste or type the Repair ID"
-                value={actionRepairId}
-                onChange={(e)=>setActionRepairId(e.target.value)}
-              />
-            </label>
+            <div className="mt-1">
+              <FormInput label="Repair ID" placeholder="Paste or type the Repair ID" value={actionRepairId} onChange={e=>setActionRepairId(e.currentTarget.value)} />
+            </div>
           </div>
           <div className="flex gap-2">
             {actionParam === 'assign' ? (
@@ -363,13 +362,12 @@ const Repairs: React.FC = () => {
                     <div className="flex items-center justify-between gap-2 w-full">
                       <div className="flex items-center gap-2">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${statusPill(r.status)}`}>{r.status}</span>
-                        <select
-                          className="border border-white/10 bg-[#0f1218] text-white rounded-md p-1 text-sm w-40 focus:outline-none focus:ring-2 focus:ring-[#A48AFB] focus:border-[#A48AFB]"
+                        <FormSelect
                           value={editStatus[r.id] ?? r.status}
-                          onChange={(e) => setEditStatus({ ...editStatus, [r.id]: e.target.value })}
+                          onChange={(e) => setEditStatus({ ...editStatus, [r.id]: e.currentTarget.value })}
                         >
                           {statuses.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
+                        </FormSelect>
                       </div>
                       <button
                         className="inline-flex items-center justify-center rounded-md border border-white/10 bg-white/5 hover:bg-white/10 p-2 text-slate-200 shrink-0"
@@ -395,16 +393,15 @@ const Repairs: React.FC = () => {
 
                     {/* Assign technician (kept inline in row) */}
                     <div className="flex items-center gap-2">
-                      <select
-                        className="border border-white/10 bg-[#0f1218] text-white rounded-md p-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#A48AFB] focus:border-[#A48AFB]"
+                      <FormSelect
                         value={assignChoice[r.id] ?? ''}
-                        onChange={(e) => setAssignChoice({ ...assignChoice, [r.id]: e.target.value })}
+                        onChange={(e) => setAssignChoice({ ...assignChoice, [r.id]: e.currentTarget.value })}
                       >
                         <option value="">Assign technician...</option>
                         {technicians.map(t => (
                           <option key={t.id} value={t.id}>{t.firstName} {t.lastName} ({t.email})</option>
                         ))}
-                      </select>
+                      </FormSelect>
                       <button
                         className="inline-flex items-center justify-center rounded-md border border-white/10 bg-white/5 hover:bg-white/10 p-2 text-slate-200"
                         onClick={() => handleAssign(r.id)}
@@ -475,41 +472,23 @@ const Repairs: React.FC = () => {
           </table>
         </div>
       )}
-      {/* Modals */}
-      {modal.kind !== 'none' && createPortal(
-        <div className="fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-black/60" onClick={closeModal} />
-          <div className="fixed z-10 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-sm max-h-[80vh] overflow-auto rounded-xl border border-white/10 bg-[#12151d] p-5 shadow-xl">
-            <h3 className="text-lg font-semibold text-white mb-2">{modal.title}</h3>
-            <p className="text-slate-300 text-sm mb-4">{modal.message}</p>
-            {modal.kind === 'confirm' ? (
-              <div className="flex justify-end gap-2">
-                <button
-                  className="inline-flex items-center justify-center rounded-md border border-white/10 bg-white/5 hover:bg-white/10 px-3 py-1.5 text-sm text-white"
-                  onClick={closeModal}
-                >
-                  Close
-                </button>
-                <button
-                  className="inline-flex items-center justify-center rounded-md border border-[#A48AFB] bg-[#A48AFB]/20 hover:bg-[#A48AFB]/30 px-3 py-1.5 text-sm text-white"
-                  onClick={(modal as any).onConfirm}
-                >
-                  {(modal as any).confirmText || 'Confirm'}
-                </button>
-              </div>
-            ) : (
-              <div className="flex justify-end">
-                <button
-                  className="inline-flex items-center justify-center rounded-md border border-white/10 bg-white/5 hover:bg-white/10 px-3 py-1.5 text-sm text-white"
-                  onClick={closeModal}
-                >
-                  {(modal as any).okText || 'OK'}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>,
-        document.body
+      {/* Modals using shared components */}
+      {modal.kind === 'confirm' && (
+        <ConfirmDialog
+          open
+          title={modal.title}
+          message={modal.message}
+          confirmText={(modal as any).confirmText}
+          onCancel={closeModal}
+          onConfirm={(modal as any).onConfirm}
+        />
+      )}
+      {modal.kind === 'alert' && (
+        <Modal open onClose={closeModal} title={modal.title} footer={(
+          <button className="rounded-md border border-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/5" onClick={closeModal}>{(modal as any).okText || 'OK'}</button>
+        )}>
+          <p className="text-slate-300 text-sm">{modal.message}</p>
+        </Modal>
       )}
     </div>
   )

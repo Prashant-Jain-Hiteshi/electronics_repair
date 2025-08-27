@@ -15,13 +15,31 @@ export enum PaymentStatus {
   REFUNDED = 'refunded',
 }
 
+export enum PaymentKind {
+  DEPOSIT = 'deposit',
+  PARTIAL = 'partial',
+  FINAL = 'final',
+  REFUND = 'refund',
+}
+
+export enum PaymentProvider {
+  MANUAL = 'manual',
+  STRIPE = 'stripe',
+  UPI = 'upi',
+}
+
 interface PaymentAttributes {
   id: string;
   repairOrderId: string;
   amount: number;
   method: PaymentMethod;
   status: PaymentStatus;
+  kind?: PaymentKind;
+  provider?: PaymentProvider;
+  currencyCode?: string;
   transactionId?: string;
+  intentId?: string | null;
+  linkUrl?: string | null;
   paidAt?: Date;
   notes?: string;
   createdAt?: Date;
@@ -31,7 +49,7 @@ interface PaymentAttributes {
 interface PaymentCreationAttributes
   extends Optional<
     PaymentAttributes,
-    'id' | 'status' | 'transactionId' | 'paidAt' | 'notes' | 'createdAt' | 'updatedAt'
+    'id' | 'status' | 'transactionId' | 'paidAt' | 'notes' | 'createdAt' | 'updatedAt' | 'kind' | 'provider' | 'currencyCode' | 'intentId' | 'linkUrl'
   > {}
 
 class Payment
@@ -43,7 +61,12 @@ class Payment
   public amount!: number;
   public method!: PaymentMethod;
   public status!: PaymentStatus;
+  public kind?: PaymentKind | undefined;
+  public provider?: PaymentProvider | undefined;
+  public currencyCode?: string | undefined;
   public transactionId?: string | undefined;
+  public intentId?: string | null | undefined;
+  public linkUrl?: string | null | undefined;
   public paidAt?: Date | undefined;
   public notes?: string | undefined;
   public readonly createdAt!: Date;
@@ -69,7 +92,19 @@ Payment.init(
       allowNull: false,
       defaultValue: PaymentStatus.COMPLETED,
     },
+    kind: {
+      type: DataTypes.ENUM(...Object.values(PaymentKind)),
+      allowNull: true,
+    },
+    provider: {
+      type: DataTypes.ENUM(...Object.values(PaymentProvider)),
+      allowNull: true,
+      defaultValue: PaymentProvider.MANUAL,
+    },
+    currencyCode: { type: DataTypes.STRING(8), allowNull: true },
     transactionId: { type: DataTypes.STRING, allowNull: true },
+    intentId: { type: DataTypes.STRING, allowNull: true },
+    linkUrl: { type: DataTypes.TEXT, allowNull: true },
     paidAt: { type: DataTypes.DATE, allowNull: true },
     notes: { type: DataTypes.TEXT, allowNull: true },
   },

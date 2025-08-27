@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, Link } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { api } from '@/api/client'
+import Toast from '@/components/common/Toast'
 import { connectSocket, disconnectSocket } from '@/api/socket'
 import Login from '@/pages/Login'
 import Register from '@/pages/Register'
@@ -18,6 +19,8 @@ import AdminRepairDetails from '@/pages/admin/AdminRepairDetails'
 import AdminInventory from '@/pages/admin/Inventory'
 import AdminPayments from '@/pages/admin/Payments'
 import AdminAnalytics from '@/pages/admin/Analytics'
+import AdminEstimates from '@/pages/admin/Estimates'
+import AdminEstimateDetails from '@/pages/admin/EstimateDetails'
 import TechnicianDashboard from '@/pages/technician/Dashboard'
 import TechnicianShell from '@/components/technician/TechnicianShell'
 
@@ -551,7 +554,22 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 }
 
 const App: React.FC = () => {
+  // Global toast queue
+  const [toasts, setToasts] = useState<Array<{ id: number; kind: 'success'|'error'|'info'; message: string }>>([])
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail || {}
+      const kind = (detail.kind === 'success' || detail.kind === 'error' || detail.kind === 'info') ? detail.kind : 'info'
+      const message = typeof detail.message === 'string' ? detail.message : 'An error occurred.'
+      setToasts((prev) => [{ id: Date.now() + Math.random(), kind, message }, ...prev].slice(0, 3))
+    }
+    window.addEventListener('app:toast', handler as EventListener)
+    return () => window.removeEventListener('app:toast', handler as EventListener)
+  }, [])
+
   return (
+    <>
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
@@ -624,6 +642,8 @@ const App: React.FC = () => {
         <Route index element={<AdminOverview />} />
         <Route path="customers" element={<AdminCustomers />} />
         <Route path="technicians" element={<AdminTechnicians />} />
+        <Route path="estimates" element={<AdminEstimates />} />
+        <Route path="estimates/:id" element={<AdminEstimateDetails />} />
         <Route path="repairs" element={<AdminRepairs />} />
         <Route path="repairs/:id" element={<AdminRepairDetails />} />
         <Route path="inventory" element={<AdminInventory />} />
@@ -631,6 +651,16 @@ const App: React.FC = () => {
         <Route path="analytics" element={<AdminAnalytics />} />
       </Route>
     </Routes>
+
+    {/* Global Toasts (fixed, top-right) */}
+    <div className="fixed z-[100] top-3 right-3 w-[92vw] max-w-sm space-y-2">
+      {toasts.map(t => (
+        <Toast key={t.id} kind={t.kind} autoHideMs={4500} onClose={() => setToasts(prev => prev.filter(x => x.id !== t.id))}>
+          {t.message}
+        </Toast>
+      ))}
+    </div>
+    </>
   )
 }
 

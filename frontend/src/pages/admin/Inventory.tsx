@@ -1,6 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { api, type ApiError } from '@/api/client'
 import { connectSocket, getSocket } from '@/api/socket'
+import FormInput from '@/components/common/FormInput'
+import FormSelect from '@/components/common/FormSelect'
+import Toast from '@/components/common/Toast'
+import ConfirmDialog from '@/components/common/ConfirmDialog'
 
 type Item = {
   id: string
@@ -97,16 +101,24 @@ const Inventory: React.FC = () => {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold tracking-tight text-white">Inventory</h1>
       </div>
-      {error && <div className="text-rose-400 text-sm">{error}</div>}
-      {success && <div className="text-emerald-400 text-sm">{success}</div>}
+      {error && (
+        <Toast kind="error" onClose={() => setError(null)} autoHideMs={5000}>
+          {error}
+        </Toast>
+      )}
+      {success && (
+        <Toast kind="success" onClose={() => setSuccess(null)} autoHideMs={4000}>
+          {success}
+        </Toast>
+      )}
 
       {/* Create new inventory item */}
       <div className="rounded-2xl p-4 space-y-3 shadow-card border border-white/10 bg-[#12151d] text-white">
         <h2 className="font-medium text-white">Add Item</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <input className="input" placeholder="Part Name" value={form.partName as string} onChange={e=>setForm({...form, partName: e.target.value})} />
-          <input className="input" placeholder="Part Number (SKU)" value={form.partNumber as string} onChange={e=>setForm({...form, partNumber: e.target.value})} />
-          <input className="input" placeholder="Category" value={form.category as string} onChange={e=>setForm({...form, category: e.target.value})} />
+          <FormInput label="Part Name" placeholder="e.g., Battery" value={form.partName as string} onChange={e=>setForm({...form, partName: e.currentTarget.value})} />
+          <FormInput label="Part Number (SKU)" placeholder="e.g., BAT-IPH12" value={form.partNumber as string} onChange={e=>setForm({...form, partNumber: e.currentTarget.value})} />
+          <FormInput label="Category" placeholder="e.g., Power" value={form.category as string} onChange={e=>setForm({...form, category: e.currentTarget.value})} />
         </div>
         <button
           className="btn"
@@ -168,13 +180,12 @@ const Inventory: React.FC = () => {
                 >
                   <td className="py-2 px-3">
                     {edit[r.id] ? (
-                      <input
-                        className="input"
+                      <FormInput
                         value={(edit[r.id].partName as string) ?? r.partName}
                         onChange={ev =>
                           setEdit({
                             ...edit,
-                            [r.id]: { ...edit[r.id], partName: ev.target.value },
+                            [r.id]: { ...edit[r.id], partName: ev.currentTarget.value },
                           })
                         }
                       />
@@ -184,13 +195,12 @@ const Inventory: React.FC = () => {
                   </td>
                   <td className="py-2 px-3">
                     {edit[r.id] ? (
-                      <input
-                        className="input"
+                      <FormInput
                         value={(edit[r.id].partNumber as string) ?? r.partNumber}
                         onChange={ev =>
                           setEdit({
                             ...edit,
-                            [r.id]: { ...edit[r.id], partNumber: ev.target.value },
+                            [r.id]: { ...edit[r.id], partNumber: ev.currentTarget.value },
                           })
                         }
                       />
@@ -200,13 +210,12 @@ const Inventory: React.FC = () => {
                   </td>
                   <td className="py-2 px-3">
                     {edit[r.id] ? (
-                      <input
-                        className="input"
+                      <FormInput
                         value={(edit[r.id].category as string) ?? r.category}
                         onChange={ev =>
                           setEdit({
                             ...edit,
-                            [r.id]: { ...edit[r.id], category: ev.target.value },
+                            [r.id]: { ...edit[r.id], category: ev.currentTarget.value },
                           })
                         }
                       />
@@ -216,14 +225,13 @@ const Inventory: React.FC = () => {
                   </td>
                   <td className="py-2 px-3">
                     {edit[r.id] ? (
-                      <input
-                        className="input"
+                      <FormInput
                         type="number"
                         value={(edit[r.id].quantity as number) ?? r.quantity}
                         onChange={ev =>
                           setEdit({
                             ...edit,
-                            [r.id]: { ...edit[r.id], quantity: Number(ev.target.value) },
+                            [r.id]: { ...edit[r.id], quantity: Number(ev.currentTarget.value) },
                           })
                         }
                       />
@@ -238,15 +246,14 @@ const Inventory: React.FC = () => {
                   </td>
                   <td className="py-2 px-3">
                     {edit[r.id] ? (
-                      <input
-                        className="input"
+                      <FormInput
                         type="number"
                         step="0.01"
                         value={(edit[r.id].sellingPrice as number) ?? Number(r.sellingPrice)}
                         onChange={ev =>
                           setEdit({
                             ...edit,
-                            [r.id]: { ...edit[r.id], sellingPrice: Number(ev.target.value) },
+                            [r.id]: { ...edit[r.id], sellingPrice: Number(ev.currentTarget.value) },
                           })
                         }
                       />
@@ -321,41 +328,26 @@ const Inventory: React.FC = () => {
           </table>
         </div>
       )}
-      {/* Confirm Delete Modal */}
-      {confirm.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setConfirm({ open: false })} />
-          <div className="relative w-full max-w-sm rounded-2xl border border-white/10 bg-[#12151d] p-5 shadow-xl text-white">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-semibold">Delete item?</h3>
-                <p className="mt-1 text-sm text-slate-300">This will permanently remove <span className="text-white">{confirm.name}</span> from inventory.</p>
-              </div>
-              <button className="icon-btn" aria-label="Close" onClick={() => setConfirm({ open: false })}><IconX /></button>
-            </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button className="rounded-md border border-white/10 px-3 py-2 text-sm text-white hover:bg-white/5" onClick={() => setConfirm({ open: false })}>Cancel</button>
-              <button
-                className="btn"
-                onClick={async () => {
-                  if (!confirm.id) return
-                  setError(null);
-                  setSuccess(null);
-                  try {
-                    await api.delete(`/inventory/${confirm.id}`);
-                    setSuccess('Item deleted');
-                    setConfirm({ open: false });
-                    await load();
-                  } catch (e: any) {
-                    const err = (e?.response?.data as ApiError) || {};
-                    setError(err.message || 'Failed to delete');
-                  }
-                }}
-              >Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={!!confirm.open}
+        title="Delete item?"
+        message={`This will permanently remove ${confirm.name || 'this item'} from inventory.`}
+        confirmText="Delete"
+        onCancel={() => setConfirm({ open: false })}
+        onConfirm={async () => {
+          if (!confirm.id) return
+          setError(null); setSuccess(null)
+          try {
+            await api.delete(`/inventory/${confirm.id}`)
+            setSuccess('Item deleted')
+            setConfirm({ open: false })
+            await load()
+          } catch (e: any) {
+            const err = (e?.response?.data as ApiError) || {}
+            setError(err.message || 'Failed to delete')
+          }
+        }}
+      />
     </div>
   )
 }

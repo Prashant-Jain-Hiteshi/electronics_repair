@@ -12,9 +12,9 @@ export interface InvoiceTotals {
   balanceDue: number;
 }
 
+import { formatCurrency } from './currency';
 export function currency(n: number | string | null | undefined) {
-  const num = Number(n || 0);
-  return num.toFixed(2);
+  return formatCurrency(n);
 }
 
 export function buildRepairInvoiceHTML(

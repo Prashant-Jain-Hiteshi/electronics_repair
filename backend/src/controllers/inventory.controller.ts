@@ -1,13 +1,62 @@
 import { Request, Response } from 'express';
+import { Op, WhereOptions } from 'sequelize';
 import Inventory from '../models/Inventory';
 import { emitToRole } from '../socket';
 import InventoryUsage from '../models/InventoryUsage';
 import { transporter } from '../utils/mailer';
 
-export async function listInventory(_req: Request, res: Response) {
+export async function listInventory(req: Request, res: Response) {
   try {
-    const items = await Inventory.findAll();
-    return res.status(200).json({ items });
+    const {
+      q,
+      category,
+      isActive,
+      page = '1',
+      pageSize = '20',
+      sort = 'createdAt',
+      direction = 'desc',
+    } = (req.query || {}) as Record<string, string | undefined>;
+
+    const p = Math.max(1, Number(page) || 1);
+    const ps = Math.min(100, Math.max(1, Number(pageSize) || 20));
+    const offset = (p - 1) * ps;
+    const dir = String(direction || 'desc').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
+    const where: WhereOptions = {};
+    if (category) (where as any).category = category;
+    if (typeof isActive !== 'undefined') (where as any).isActive = String(isActive) === 'true';
+    if (q && q.trim()) {
+      const s = q.trim();
+      (where as any)[Op.or] = [
+        { partName: { [Op.iLike as any]: `%${s}%` } as any },
+        { partNumber: { [Op.iLike as any]: `%${s}%` } as any },
+        { description: { [Op.iLike as any]: `%${s}%` } as any },
+        { brand: { [Op.iLike as any]: `%${s}%` } as any },
+        { supplier: { [Op.iLike as any]: `%${s}%` } as any },
+        { category: { [Op.iLike as any]: `%${s}%` } as any },
+      ];
+    }
+
+    const validSortCols = ['createdAt', 'updatedAt', 'partName', 'partNumber', 'category', 'quantity', 'sellingPrice'];
+    const sortCol = validSortCols.includes(String(sort)) ? String(sort) : 'createdAt';
+
+    const { rows, count } = await (Inventory as any).findAndCountAll({
+      where,
+      limit: ps,
+      offset,
+      order: [[sortCol, dir]] as any,
+    });
+
+    return res.status(200).json({
+      items: rows,
+      total: count,
+      page: p,
+      pageSize: ps,
+      sort: sortCol,
+      direction: dir,
+      q: q || '',
+      filters: { category: category || null, isActive: typeof isActive !== 'undefined' ? String(isActive) === 'true' : null },
+    });
   } catch (err) {
     console.error('List inventory error:', err);
     return res.status(500).json({ message: 'Internal server error' });

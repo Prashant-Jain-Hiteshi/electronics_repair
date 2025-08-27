@@ -57,6 +57,7 @@ const navItems = [
   { to: '/admin', label: 'Overview', Icon: IconDashboard },
   { to: '/admin/customers', label: 'Customers', Icon: IconUsers },
   { to: '/admin/technicians', label: 'Technicians', Icon: IconWrench },
+  { to: '/admin/estimates', label: 'Estimates', Icon: IconClipboard },
   { to: '/admin/repairs', label: 'Repairs', Icon: IconClipboard },
   { to: '/admin/inventory', label: 'Inventory', Icon: IconBoxes },
   { to: '/admin/payments', label: 'Payments', Icon: IconCard },

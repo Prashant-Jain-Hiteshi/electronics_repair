@@ -13,6 +13,7 @@ interface UserAttributes {
   firstName: string;
   lastName: string;
   address?: string | null;
+  locationId?: string | null;
   role: UserRole;
   isActive: boolean;
   isVerified: boolean;
@@ -37,6 +38,7 @@ class User
   public firstName!: string;
   public lastName!: string;
   public address?: string | null;
+  public locationId?: string | null;
   public role!: UserRole;
   public isActive!: boolean;
   public isVerified!: boolean;
@@ -78,6 +80,11 @@ User.init(
     address: {
       type: DataTypes.STRING,
       allowNull: true,
+    },
+    locationId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: { model: 'locations', key: 'id' },
     },
     role: {
       type: DataTypes.ENUM(...Object.values(UserRole)),

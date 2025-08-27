@@ -72,6 +72,8 @@ router.put('/:id/cancel', requireAuth, requireRole(['customer', 'technician', 'a
 
 // Admin: assign technician to a repair order
 router.put('/:id/assign', requireAuth, requireRole(['admin']), assignTechnician);
+// POST alias for assignment (for create semantics)
+router.post('/:id/assign', requireAuth, requireRole(['admin']), assignTechnician);
 
 // Attachments: list, upload (1-3), delete
 router.get('/:id/attachments', requireAuth, requireRole(['customer', 'technician', 'admin']), [param('id').isString()], handleValidation, listAttachments);

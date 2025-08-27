@@ -7,6 +7,11 @@ import inventoryRoutes from './routes/inventory.routes';
 import repairsRoutes from './routes/repairs.routes';
 import paymentsRoutes from './routes/payments.routes';
 import analyticsRoutes from './routes/analytics.routes';
+import estimatesRoutes from './routes/estimates.routes';
+import techniciansRoutes from './routes/technicians.routes';
+import locationsRoutes from './routes/locations.routes';
+import inventoryStockRoutes from './routes/inventoryStock.routes';
+import stockTransfersRoutes from './routes/stockTransfers.routes';
 import path from 'path';
 import { Request, Response } from 'express';
 
@@ -40,6 +45,11 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/repairs', repairsRoutes);
 app.use('/api/payments', paymentsRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/estimates', estimatesRoutes);
+app.use('/api/technicians', techniciansRoutes);
+app.use('/api/locations', locationsRoutes);
+app.use('/api/inventory-stock', inventoryStockRoutes);
+app.use('/api/stock-transfers', stockTransfersRoutes);
 
 // Static: serve uploaded files
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
