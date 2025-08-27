@@ -43,3 +43,4 @@ app.use('/api/payments', paymentsRoutes);
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 export default app;
+
