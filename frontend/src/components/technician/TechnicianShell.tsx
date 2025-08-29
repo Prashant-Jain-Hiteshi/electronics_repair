@@ -10,6 +10,12 @@ const IconClock = () => (
     <path d="M12 7v6l4 2" />
   </svg>
 )
+const IconProfile = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <circle cx="12" cy="8" r="4" />
+    <path d="M4 20c0-4 4-6 8-6s8 2 8 6" />
+  </svg>
+)
 const IconProgress = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
     <path d="M12 3a9 9 0 1 0 9 9" />
@@ -52,6 +58,10 @@ const TechnicianShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const [techNotifs, setTechNotifs] = useState<any[]>([])
   const btnRef = useRef<HTMLButtonElement | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
+  // User menu (avatar)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const userBtnRef = useRef<HTMLButtonElement | null>(null)
+  const userMenuRef = useRef<HTMLDivElement | null>(null)
 
   // Lock browser/body scroll while in technician shell
   useEffect(() => {
@@ -74,8 +84,12 @@ const TechnicianShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
         const inside = (!!menuRef.current && menuRef.current.contains(t)) || (!!btnRef.current && btnRef.current.contains(t))
         if (!inside) setNotifOpen(false)
       }
+      if (userMenuOpen) {
+        const insideUser = (!!userMenuRef.current && userMenuRef.current.contains(t)) || (!!userBtnRef.current && userBtnRef.current.contains(t))
+        if (!insideUser) setUserMenuOpen(false)
+      }
     }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setNotifOpen(false) }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setNotifOpen(false); setUserMenuOpen(false) } }
     document.addEventListener('mousedown', onDown)
     document.addEventListener('touchstart', onDown, { passive: true } as any)
     document.addEventListener('keydown', onKey)
@@ -84,7 +98,7 @@ const TechnicianShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
       document.removeEventListener('touchstart', onDown)
       document.removeEventListener('keydown', onKey)
     }
-  }, [notifOpen])
+  }, [notifOpen, userMenuOpen])
 
   // Socket listener for technician notifications
   useEffect(() => {
@@ -123,51 +137,70 @@ const TechnicianShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
             <img src={`${base}logo.svg`} alt="Electro-Repair" className="h-6 w-auto" />
             <span>Electro-Repair</span>
           </Link>
-          <div className="relative">
-            <button
-              ref={btnRef}
-              aria-label="Notifications"
-              className="relative rounded-md border border-white/10 bg-white/5 px-3 py-2"
-              onClick={() => setNotifOpen(v => !v)}
-            >
-              🔔
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 inline-flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] h-5 min-w-[1.25rem] px-1">{unreadCount}</span>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <button
+                ref={btnRef}
+                aria-label="Notifications"
+                className="relative rounded-md border border-white/10 bg-white/5 px-3 py-2"
+                onClick={() => setNotifOpen(v => !v)}
+              >
+                🔔
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 inline-flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] h-5 min-w-[1.25rem] px-1">{unreadCount}</span>
+                )}
+              </button>
+              {notifOpen && (
+                <div ref={menuRef} className="absolute right-0 mt-2 w-80 max-w-[90vw] rounded-lg border border-white/10 bg-[#12151d] text-white shadow-xl z-40">
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+                    <div className="font-medium text-sm">Notifications</div>
+                    <button className="text-xs rounded border border-white/10 px-2 py-1 hover:bg-white/5" onClick={markAllRead} disabled={unreadCount===0}>Mark all read</button>
+                  </div>
+                  <div className="max-h-80 overflow-y-auto scrollbar-none">
+                    {techNotifs.length === 0 ? (
+                      <div className="p-3 text-xs text-slate-300">No notifications</div>
+                    ) : (
+                      techNotifs.slice(0,20).map(n => (
+                        <div key={n.id} className="px-3 py-2 border-b border-white/5 text-sm flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="truncate"><span className="font-medium">{n.title || 'Update'}</span> • {n.message}</div>
+                            <div className="text-[11px] text-slate-400 truncate">{new Date(n.createdAt).toLocaleString()}</div>
+                          </div>
+                          <div className="shrink-0 flex items-center gap-2">
+                            {(n.kind === 'new_repair' || n.kind === 'status_change') && (
+                              <Link to={`/technician`} onClick={() => setNotifOpen(false)} className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5 text-white">Open</Link>
+                            )}
+                            {!n.read && (
+                              <button className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5" onClick={() => markRead(n.id)}>Mark read</button>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <div className="px-3 py-2 border-t border-white/10 flex justify-end">
+                    <button className="text-xs rounded border border-white/10 px-2 py-1 hover:bg-white/5" onClick={() => { saveNotifs([]); setTechNotifs([]); }} disabled={techNotifs.length===0}>Clear all</button>
+                  </div>
+                </div>
               )}
-            </button>
-            {notifOpen && (
-              <div ref={menuRef} className="absolute right-0 mt-2 w-80 max-w-[90vw] rounded-lg border border-white/10 bg-[#12151d] text-white shadow-xl z-40">
-                <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
-                  <div className="font-medium text-sm">Notifications</div>
-                  <button className="text-xs rounded border border-white/10 px-2 py-1 hover:bg-white/5" onClick={markAllRead} disabled={unreadCount===0}>Mark all read</button>
+            </div>
+            <div className="relative">
+              <button
+                ref={userBtnRef}
+                aria-label="User menu"
+                className="h-9 w-9 rounded-full bg-white/10 border border-white/10 text-white flex items-center justify-center font-semibold"
+                onClick={() => setUserMenuOpen(v => !v)}
+              >
+                {(user?.firstName?.[0] || 'U')}{(user?.lastName?.[0] || '')}
+              </button>
+              {userMenuOpen && (
+                <div ref={userMenuRef} className="absolute right-0 mt-2 w-44 rounded-lg border border-white/10 bg-[#12151d] text-white shadow-xl z-40">
+                  <div className="px-3 py-2 text-sm border-b border-white/10">{user?.firstName} {user?.lastName}</div>
+                  <Link to="/technician/profile" onClick={() => setUserMenuOpen(false)} className="block px-3 py-2 text-sm hover:bg-white/5">Profile</Link>
+                  <button onClick={() => { setUserMenuOpen(false); setShowLogoutConfirm(true) }} className="w-full text-left px-3 py-2 text-sm hover:bg-white/5">Logout</button>
                 </div>
-                <div className="max-h-80 overflow-y-auto scrollbar-none">
-                  {techNotifs.length === 0 ? (
-                    <div className="p-3 text-xs text-slate-300">No notifications</div>
-                  ) : (
-                    techNotifs.slice(0,20).map(n => (
-                      <div key={n.id} className="px-3 py-2 border-b border-white/5 text-sm flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="truncate"><span className="font-medium">{n.title || 'Update'}</span> • {n.message}</div>
-                          <div className="text-[11px] text-slate-400 truncate">{new Date(n.createdAt).toLocaleString()}</div>
-                        </div>
-                        <div className="shrink-0 flex items-center gap-2">
-                          {(n.kind === 'new_repair' || n.kind === 'status_change') && (
-                            <Link to={`/technician`} onClick={() => setNotifOpen(false)} className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5 text-white">Open</Link>
-                          )}
-                          {!n.read && (
-                            <button className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5" onClick={() => markRead(n.id)}>Mark read</button>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-                <div className="px-3 py-2 border-t border-white/10 flex justify-end">
-                  <button className="text-xs rounded border border-white/10 px-2 py-1 hover:bg-white/5" onClick={() => { saveNotifs([]); setTechNotifs([]); }} disabled={techNotifs.length===0}>Clear all</button>
-                </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
         {/* Sidebar - desktop */}
@@ -177,7 +210,7 @@ const TechnicianShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
             <span>Electro-Repair</span>
           </Link>
           <nav className="flex flex-col gap-1 text-sm">
-            <Link to={homePath} className={`rounded-lg px-3 py-2 text-white hover:bg:white/5 hover:bg-white/5 flex items-center gap-2 ${isDashboardActive() ? 'bg-white/10 border border-white/10' : ''}`}>
+            <Link to={homePath} className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 flex items-center gap-2 ${isDashboardActive() ? 'bg-white/10 border border-white/10' : ''}`}>
               <span className="text-slate-300"><IconDashboard /></span>
               <span>Dashboard</span>
             </Link>
@@ -208,51 +241,70 @@ const TechnicianShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
               <img src={`${base}logo.svg`} alt="Electro-Repair" className="h-7 w-auto" />
               <span>Technician</span>
             </div>
-            <div className="relative">
-              <button
-                ref={btnRef}
-                aria-label="Notifications"
-                className="relative rounded-md border border-white/10 bg-white/5 px-3 py-1.5 hover:bg-white/10"
-                onClick={() => setNotifOpen(v => !v)}
-              >
-                🔔
-                {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 inline-flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] h-5 min-w-[1.25rem] px-1">{unreadCount}</span>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <button
+                  ref={btnRef}
+                  aria-label="Notifications"
+                  className="relative rounded-md border border-white/10 bg-white/5 px-3 py-1.5 hover:bg-white/10"
+                  onClick={() => setNotifOpen(v => !v)}
+                >
+                  🔔
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 inline-flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] h-5 min-w-[1.25rem] px-1">{unreadCount}</span>
+                  )}
+                </button>
+                {notifOpen && (
+                  <div ref={menuRef} className="absolute right-0 mt-2 w-80 max-w-[90vw] rounded-lg border border-white/10 bg-[#12151d] text-white shadow-xl z-40">
+                    <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+                      <div className="font-medium text-sm">Notifications</div>
+                      <button className="text-xs rounded border border-white/10 px-2 py-1 hover:bg-white/5" onClick={markAllRead} disabled={unreadCount===0}>Mark all read</button>
+                    </div>
+                    <div className="max-h-80 overflow-y-auto scrollbar-none">
+                      {techNotifs.length === 0 ? (
+                        <div className="p-3 text-xs text-slate-300">No notifications</div>
+                      ) : (
+                        techNotifs.slice(0,20).map(n => (
+                          <div key={n.id} className="px-3 py-2 border-b border-white/5 text-sm flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="truncate"><span className="font-medium">{n.title || 'Update'}</span> • {n.message}</div>
+                              <div className="text-[11px] text-slate-400 truncate">{new Date(n.createdAt).toLocaleString()}</div>
+                            </div>
+                            <div className="shrink-0 flex items-center gap-2">
+                              {(n.kind === 'new_repair' || n.kind === 'status_change') && (
+                                <Link to={`/technician`} className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5 text-white">Open</Link>
+                              )}
+                              {!n.read && (
+                                <button className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5" onClick={() => markRead(n.id)}>Mark read</button>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <div className="px-3 py-2 border-t border-white/10 flex justify-end">
+                      <button className="text-xs rounded border border-white/10 px-2 py-1 hover:bg-white/5" onClick={() => { saveNotifs([]); setTechNotifs([]); }} disabled={techNotifs.length===0}>Clear all</button>
+                    </div>
+                  </div>
                 )}
-              </button>
-              {notifOpen && (
-                <div ref={menuRef} className="absolute right-0 mt-2 w-80 max-w-[90vw] rounded-lg border border-white/10 bg-[#12151d] text-white shadow-xl z-40">
-                  <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
-                    <div className="font-medium text-sm">Notifications</div>
-                    <button className="text-xs rounded border border-white/10 px-2 py-1 hover:bg-white/5" onClick={markAllRead} disabled={unreadCount===0}>Mark all read</button>
+              </div>
+              <div className="relative">
+                <button
+                  ref={userBtnRef}
+                  aria-label="User menu"
+                  className="h-9 w-9 rounded-full bg-white/10 border border-white/10 text-white flex items-center justify-center font-semibold"
+                  onClick={() => setUserMenuOpen(v => !v)}
+                >
+                  {(user?.firstName?.[0] || 'U')}{(user?.lastName?.[0] || '')}
+                </button>
+                {userMenuOpen && (
+                  <div ref={userMenuRef} className="absolute right-0 mt-2 w-44 rounded-lg border border-white/10 bg-[#12151d] text-white shadow-xl z-40">
+                    <div className="px-3 py-2 text-sm border-b border-white/10">{user?.firstName} {user?.lastName}</div>
+                    <Link to="/technician/profile" onClick={() => setUserMenuOpen(false)} className="block px-3 py-2 text-sm hover:bg-white/5">Profile</Link>
+                    <button onClick={() => { setUserMenuOpen(false); setShowLogoutConfirm(true) }} className="w-full text-left px-3 py-2 text-sm hover:bg-white/5">Logout</button>
                   </div>
-                  <div className="max-h-80 overflow-y-auto scrollbar-none">
-                    {techNotifs.length === 0 ? (
-                      <div className="p-3 text-xs text-slate-300">No notifications</div>
-                    ) : (
-                      techNotifs.slice(0,20).map(n => (
-                        <div key={n.id} className="px-3 py-2 border-b border-white/5 text-sm flex items-center justify-between gap-2">
-                          <div className="min-w-0">
-                            <div className="truncate"><span className="font-medium">{n.title || 'Update'}</span> • {n.message}</div>
-                            <div className="text-[11px] text-slate-400 truncate">{new Date(n.createdAt).toLocaleString()}</div>
-                          </div>
-                          <div className="shrink-0 flex items-center gap-2">
-                            {(n.kind === 'new_repair' || n.kind === 'status_change') && (
-                              <Link to={`/technician`} className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5 text-white">Open</Link>
-                            )}
-                            {!n.read && (
-                              <button className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5" onClick={() => markRead(n.id)}>Mark read</button>
-                            )}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                  <div className="px-3 py-2 border-t border-white/10 flex justify-end">
-                    <button className="text-xs rounded border border-white/10 px-2 py-1 hover:bg-white/5" onClick={() => { saveNotifs([]); setTechNotifs([]); }} disabled={techNotifs.length===0}>Clear all</button>
-                  </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
           <div className="rounded-2xl border border-white/10 auth-card backdrop-blur p-4 shadow-sm text-white">

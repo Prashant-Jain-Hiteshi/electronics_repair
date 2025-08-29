@@ -22,6 +22,7 @@ interface RepairOrderAttributes {
   customerId: string;
   technicianId?: string;
   locationId?: string | null;
+  customerDeviceId?: string | null;
   deviceType: string;
   brand: string;
   model: string;
@@ -61,6 +62,7 @@ class RepairOrder
   public customerId!: string;
   public technicianId?: string | undefined;
   public locationId?: string | null;
+  public customerDeviceId?: string | null;
   public deviceType!: string;
   public brand!: string;
   public model!: string;
@@ -106,6 +108,11 @@ RepairOrder.init(
       type: DataTypes.UUID,
       allowNull: true,
       references: { model: 'locations', key: 'id' },
+    },
+    customerDeviceId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: { model: 'customer_devices', key: 'id' },
     },
     deviceType: { type: DataTypes.STRING, allowNull: false },
     brand: { type: DataTypes.STRING, allowNull: false },

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '@/api/client';
 import { useAuth } from '@/context/AuthContext';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 type Repair = {
   id: string;
@@ -41,7 +41,10 @@ const MyRepairOrders: React.FC = () => {
   const [repairs, setRepairs] = useState<Repair[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
   const [query, setQuery] = useState('');
+  const [statuses, setStatuses] = useState<string[]>([]);
 
   useEffect(() => {
     let mounted = true;
@@ -61,6 +64,26 @@ const MyRepairOrders: React.FC = () => {
     };
   }, [token]);
 
+  // Initialize filters from URL on first render
+  useEffect(() => {
+    const sp = new URLSearchParams(location.search);
+    const q = sp.get('q') || '';
+    const s = sp.get('status');
+    setQuery(q);
+    setStatuses(s ? s.split(',').filter(Boolean) : []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist filters to URL when they change
+  useEffect(() => {
+    const sp = new URLSearchParams(location.search);
+    if (query) sp.set('q', query); else sp.delete('q');
+    if (statuses.length > 0) sp.set('status', statuses.join(',')); else sp.delete('status');
+    const next = `${location.pathname}?${sp.toString()}`;
+    // Avoid pushing duplicates
+    if (next !== `${location.pathname}${location.search}`) navigate(next, { replace: true });
+  }, [query, statuses]);
+
   
 
   const onCancel = async (id: string) => {
@@ -75,19 +98,23 @@ const MyRepairOrders: React.FC = () => {
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return repairs;
-    return repairs.filter((r) =>
-      [
-        r.id.slice(0, 8),
-        (r as any).deviceBrand ?? r.brand,
-        (r as any).deviceModel ?? r.model,
-        r.issueDescription,
-        r.status,
-      ]
-        .filter(Boolean)
-        .some((v) => String(v).toLowerCase().includes(q))
-    );
-  }, [repairs, query]);
+    const statusSet = new Set(statuses);
+    const filtered = repairs.filter((r) => {
+      const matchesText = !q
+        || [
+          r.id.slice(0, 8),
+          (r as any).deviceBrand ?? r.brand,
+          (r as any).deviceModel ?? r.model,
+          r.issueDescription,
+          r.status,
+        ]
+          .filter(Boolean)
+          .some((v) => String(v).toLowerCase().includes(q));
+      const matchesStatus = statusSet.size === 0 || statusSet.has(r.status);
+      return matchesText && matchesStatus;
+    });
+    return filtered;
+  }, [repairs, query, statuses]);
 
   return (
     <div className="p-4 sm:p-6 overflow-x-hidden">
@@ -98,15 +125,46 @@ const MyRepairOrders: React.FC = () => {
         </Link>
       </div>
 
-      <div className="mb-4">
-        <div className="relative max-w-xl">
-          <input
-          className="border  border-[#A48AFB] bg-[#0f1218] text-white placeholder-slate-400 rounded-md p-2 text-sm w-full max-w-xs focus:outline-none focus:ring-2 focus:ring-[#A48AFB] focus:border-[#A48AFB] hover:border-[#A48AFB]/50 transition-colors"
-          placeholder="Search by ticket, device, issue, status..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
+      <div className="mb-4 space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Status filter chips */}
+          {['pending','in_progress','awaiting_parts','completed','delivered','cancelled'].map(s => {
+            const active = statuses.includes(s);
+            return (
+              <button
+                key={s}
+                className={`rounded-full border px-3 py-1 text-xs ${active ? 'bg-white/10 border-white/20 text-white' : 'border-white/10 text-slate-300 hover:bg-white/5'}`}
+                onClick={() => setStatuses(prev => active ? prev.filter(x => x!==s) : [...prev, s])}
+              >{s}</button>
+            );
+          })}
+          <div className="relative">
+            <input
+              className="border  border-[#A48AFB] bg-[#0f1218] text-white placeholder-slate-400 rounded-md p-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-[#A48AFB] focus:border-[#A48AFB] hover:border-[#A48AFB]/50 transition-colors"
+              placeholder="Search by ticket, device, issue, status..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
         </div>
+        {/* Active filters row */}
+        {(query || statuses.length>0) && (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            {query && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-white">
+                q: {query}
+                <button className="ml-1 text-slate-300 hover:text-white" onClick={()=>setQuery('')}>✕</button>
+              </span>
+            )}
+            {statuses.map(s => (
+              <span key={s} className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-white">
+                status: {s}
+                <button className="ml-1 text-slate-300 hover:text-white" onClick={()=>setStatuses(prev=>prev.filter(x=>x!==s))}>✕</button>
+              </span>
+            ))}
+            <button className="ml-1 rounded-md border border-white/10 px-2 py-0.5 text-slate-300 hover:bg-white/5" onClick={()=>{ setQuery(''); setStatuses([]); }}>Clear filters</button>
+          </div>
+        )}
       </div>
 
       {error && (

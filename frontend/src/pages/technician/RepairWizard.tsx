@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useParams, Link, Navigate } from 'react-router-dom'
 import { latestRunForRepair, listTemplates, startRun, submitStep, completeRun, abortRun, type DiagnosticRun, type DiagnosticTemplate } from '@/api/diagnostics'
 import { api } from '@/api/client'
+import PartsPanel from '@/components/technician/PartsPanel'
 
 const Section: React.FC<{ title: string; children: React.ReactNode; right?: React.ReactNode }> = ({ title, children, right }) => (
   <div className="rounded-xl border bg-white shadow-sm">
@@ -24,6 +25,7 @@ export default function RepairWizard() {
   const [run, setRun] = useState<DiagnosticRun | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [repairStatus, setRepairStatus] = useState<string | null>(null)
 
   const currentIndex = run?.progress?.currentIndex ?? 0
   const currentStep: any = useMemo(() => {
@@ -40,12 +42,14 @@ export default function RepairWizard() {
       try {
         // Try latest run
         try {
-          const r = await latestRunForRepair(repairId)
+          const r = await latestRunForRepair(repairId!)
           if (mounted) setRun(r)
         } catch {
           // No runs yet: fetch templates to offer selection
-          const rep = await api.get(`/repairs/${repairId}`)
+          const rep = await api.get(`/repairs/${repairId!}`)
           const deviceType = rep?.data?.repair?.deviceType
+          const status = rep?.data?.repair?.status
+          if (mounted) setRepairStatus(status || null)
           const tpls = await listTemplates({ deviceType })
           if (mounted) setTemplates(tpls)
         }
@@ -180,6 +184,12 @@ export default function RepairWizard() {
               <button disabled={saving || run.status !== 'in_progress'} onClick={handleAbort} className="rounded-md border px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50">Abort</button>
               <Link to={`/technician`} className="ml-auto rounded-md border px-3 py-1.5 text-sm hover:bg-slate-50">Back to Dashboard</Link>
             </div>
+          </Section>
+
+          <Section title="Parts & Inventory" right={<Pill color={repairStatus==='cancelled'?'rose':'emerald'}>{repairStatus==='cancelled'?'Read-only':'Active'}</Pill>}>
+            {repairId && (
+              <PartsPanel repairId={repairId!} readOnly={repairStatus==='cancelled'} />
+            )}
           </Section>
         </>
       )}

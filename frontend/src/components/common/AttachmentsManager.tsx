@@ -10,6 +10,7 @@ export type AttachmentsManagerProps = {
   maxSizeMB?: number
   accept?: string[]
   title?: string
+  readOnly?: boolean
 }
 
 const DEFAULT_ACCEPT = ['image/jpeg', 'image/png', 'image/webp']
@@ -30,6 +31,7 @@ const AttachmentsManager: React.FC<AttachmentsManagerProps> = ({
   maxSizeMB = 5,
   accept = DEFAULT_ACCEPT,
   title = 'Attachments',
+  readOnly = false,
 }) => {
   const [items, setItems] = useState<RepairAttachment[]>([])
   const [loading, setLoading] = useState(false)
@@ -107,7 +109,7 @@ const AttachmentsManager: React.FC<AttachmentsManagerProps> = ({
   }, [canUpload])
 
   function onDragOver(e: React.DragEvent<HTMLDivElement>) {
-    if (!canUpload) return
+    if (!canUpload || readOnly) return
     e.preventDefault()
   }
 
@@ -129,7 +131,7 @@ const AttachmentsManager: React.FC<AttachmentsManagerProps> = ({
   }
 
   return (
-    <div className="rounded-lg border border-white/10 p-4 shadow-card">
+    <div className={`rounded-lg border border-white/10 p-4 shadow-card ${readOnly ? 'opacity-80' : ''}`}>
       <div className="flex items-center justify-between mb-3">
         <p className="text-sm font-semibold text-white">{title}</p>
         <div className="text-xs text-slate-300">{loading ? 'Loading…' : `${items.length}/${maxCount}`}</div>
@@ -142,14 +144,15 @@ const AttachmentsManager: React.FC<AttachmentsManagerProps> = ({
       ) : (
         <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-3">
           {items.map((att) => (
-            <div key={att.id} className="group relative border border-white/10 rounded-md overflow-hidden bg-white/5">
+            <div key={att.id} className={`group relative border border-white/10 rounded-md overflow-hidden bg-white/5 ${readOnly ? 'pointer-events-none' : ''}`}>
               <img
                 src={attachmentUrl(att)}
                 alt={att.originalName}
-                className="w-full h-24 object-cover cursor-pointer"
-                onClick={() => setPreview({ url: attachmentUrl(att), name: att.originalName })}
+                className={`w-full h-24 object-cover ${readOnly ? '' : 'cursor-pointer'}`}
+                onClick={() => { if (!readOnly) setPreview({ url: attachmentUrl(att), name: att.originalName }) }}
                 onError={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = '0.4' }}
               />
+              {!readOnly && (
               <div className="absolute inset-0 hidden group-hover:flex items-center justify-center gap-2 bg-black/40">
                 <button
                   onClick={() => setPreview({ url: attachmentUrl(att), name: att.originalName })}
@@ -159,13 +162,14 @@ const AttachmentsManager: React.FC<AttachmentsManagerProps> = ({
                   <button onClick={() => onDelete(att)} className="px-2 py-1 text-xs rounded-md bg-rose-500 text-white">Delete</button>
                 )}
               </div>
+              )}
             </div>
           ))}
         </div>
       )}
 
       {/* Upload */}
-      {canUpload && remaining > 0 && (
+      {canUpload && !readOnly && remaining > 0 && (
         <div className="space-y-2">
           <div
             onDragOver={onDragOver}

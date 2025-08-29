@@ -3,10 +3,12 @@ import { Navigate, Route, Routes, useLocation, Link } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { api } from '@/api/client'
 import Toast from '@/components/common/Toast'
+import ConfirmDialog from '@/components/common/ConfirmDialog'
 import { connectSocket, disconnectSocket } from '@/api/socket'
 import Login from '@/pages/Login'
 import Register from '@/pages/Register'
 import CustomerDashboard from '@/pages/CustomerDashboard'
+import MyDevices from '@/pages/MyDevices'
 import CreateRepairOrder from '@/pages/CreateRepairOrder'
 import MyRepairOrders from '@/pages/MyRepairOrders'
 import RepairOrderDetails from '@/pages/RepairOrderDetails'
@@ -24,6 +26,9 @@ import AdminEstimateDetails from '@/pages/admin/EstimateDetails'
 import TechnicianDashboard from '@/pages/technician/Dashboard'
 import TechnicianShell from '@/components/technician/TechnicianShell'
 import RepairWizard from '@/pages/technician/RepairWizard'
+import CustomerProfile from '@/pages/customer/Profile'
+import TechnicianProfilePage from '@/pages/technician/Profile'
+import AdminProfile from '@/pages/admin/Profile'
 
 // Small inline icons for sidebar
 const IconDashboard = () => (
@@ -95,6 +100,12 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const custMenuMobileRef = useRef<HTMLDivElement | null>(null)
   const adminBtnRef = useRef<HTMLButtonElement | null>(null)
   const adminMenuRef = useRef<HTMLDivElement | null>(null)
+  // Customer user menu (avatar) state and refs
+  const [custUserMenuOpen, setCustUserMenuOpen] = useState(false)
+  const custUserBtnDesktopRef = useRef<HTMLButtonElement | null>(null)
+  const custUserMenuDesktopRef = useRef<HTMLDivElement | null>(null)
+  const custUserBtnMobileRef = useRef<HTMLButtonElement | null>(null)
+  const custUserMenuMobileRef = useRef<HTMLDivElement | null>(null)
 
   // Local storage helpers (per-user)
   const userId = (useAuth().user?.id) as string | undefined
@@ -145,6 +156,15 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           (!!custBtnMobileRef.current && custBtnMobileRef.current.contains(t))
         if (!insideCustomer) setCustNotifOpen(false)
       }
+      // Customer user menu
+      if (custUserMenuOpen) {
+        const insideUser =
+          (!!custUserMenuDesktopRef.current && custUserMenuDesktopRef.current.contains(t)) ||
+          (!!custUserBtnDesktopRef.current && custUserBtnDesktopRef.current.contains(t)) ||
+          (!!custUserMenuMobileRef.current && custUserMenuMobileRef.current.contains(t)) ||
+          (!!custUserBtnMobileRef.current && custUserBtnMobileRef.current.contains(t))
+        if (!insideUser) setCustUserMenuOpen(false)
+      }
       // Admin dropdown
       if (notifOpen) {
         const insideAdmin =
@@ -154,7 +174,7 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       }
     }
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setCustNotifOpen(false); setNotifOpen(false) }
+      if (e.key === 'Escape') { setCustNotifOpen(false); setCustUserMenuOpen(false); setNotifOpen(false) }
     }
     document.addEventListener('mousedown', handlePointer)
     document.addEventListener('touchstart', handlePointer, { passive: true })
@@ -164,7 +184,7 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       document.removeEventListener('touchstart', handlePointer)
       document.removeEventListener('keydown', handleKey)
     }
-  }, [custNotifOpen, notifOpen])
+  }, [custNotifOpen, custUserMenuOpen, notifOpen])
 
   // Close on route change
   useEffect(() => { setCustNotifOpen(false); setNotifOpen(false) }, [location.pathname])
@@ -242,52 +262,71 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             <img src={`${base}logo.svg`} alt="Electro-Repair" className="h-7 w-auto" />
             <span>Electro-Repair</span>
           </Link>
-          <div className="relative">
-            <button
-              aria-label="Notifications"
-              className="relative rounded-md border border-white/10 bg-white/5 px-3 py-1.5 hover:bg-white/10"
-              onClick={() => setCustNotifOpen(v => !v)}
-              ref={custBtnDesktopRef}
-            >
-              🔔
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 inline-flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] h-5 min-w-[1.25rem] px-1">
-                  {unreadCount}
-                </span>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <button
+                aria-label="Notifications"
+                className="relative rounded-md border border-white/10 bg-white/5 px-3 py-1.5 hover:bg-white/10"
+                onClick={() => setCustNotifOpen(v => !v)}
+                ref={custBtnDesktopRef}
+              >
+                🔔
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 inline-flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] h-5 min-w-[1.25rem] px-1">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+              {custNotifOpen && (
+                <div ref={custMenuDesktopRef} className="absolute right-0 mt-2 w-80 max-w-[90vw] rounded-lg border border-white/10 bg-[#12151d] text-white shadow-xl z-40">
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+                    <div className="font-medium text-sm">Notifications</div>
+                    <button
+                      className="text-xs rounded border border-white/10 px-2 py-1 hover:bg-white/5"
+                      onClick={() => { saveCustNotifs([]); setCustNotifs([]); }}
+                      disabled={custNotifs.length === 0}
+                    >Clear all</button>
+                  </div>
+                  <div className="max-h-80 overflow-y-auto scrollbar-none">
+                    {custNotifs.length === 0 ? (
+                      <div className="p-3 text-xs text-slate-300">No notifications</div>
+                    ) : (
+                      custNotifs.slice(0, 20).map(n => (
+                        <div key={n.id} className="px-3 py-2 border-b border-white/5 text-sm flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="truncate"><span className="font-medium">{n.title || 'Update'}</span> • {n.message}</div>
+                            <div className="text-[11px] text-slate-400 truncate">{new Date(n.createdAt).toLocaleString()}</div>
+                          </div>
+                          <div className="shrink-0 flex items-center gap-2">
+                            <Link to={`/repairs/${n.repairId}`} onClick={() => setCustNotifOpen(false)} className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5 text-white">Open</Link>
+                            {!n.read && (
+                              <button className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5" onClick={() => { const next = custNotifs.map(x => x.id===n.id?{...x, read:true}:x); saveCustNotifs(next); setCustNotifs(next); }}>Mark read</button>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
               )}
-            </button>
-            {custNotifOpen && (
-              <div ref={custMenuDesktopRef} className="absolute right-0 mt-2 w-80 max-w-[90vw] rounded-lg border border-white/10 bg-[#12151d] text-white shadow-xl z-40">
-                <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
-                  <div className="font-medium text-sm">Notifications</div>
-                  <button
-                    className="text-xs rounded border border-white/10 px-2 py-1 hover:bg-white/5"
-                    onClick={() => { saveCustNotifs([]); setCustNotifs([]); }}
-                    disabled={custNotifs.length === 0}
-                  >Clear all</button>
+            </div>
+            <div className="relative">
+              <button
+                ref={custUserBtnDesktopRef}
+                aria-label="User menu"
+                className="h-9 w-9 rounded-full bg-white/10 border border-white/10 text-white flex items-center justify-center font-semibold"
+                onClick={() => setCustUserMenuOpen(v => !v)}
+              >
+                {(user?.firstName?.[0] || 'U')}{(user?.lastName?.[0] || '')}
+              </button>
+              {custUserMenuOpen && (
+                <div ref={custUserMenuDesktopRef} className="absolute right-0 mt-2 w-44 rounded-lg border border-white/10 bg-[#12151d] text-white shadow-xl z-40">
+                  <div className="px-3 py-2 text-sm border-b border-white/10">{user?.firstName} {user?.lastName}</div>
+                  <Link to="/profile" onClick={() => setCustUserMenuOpen(false)} className="block px-3 py-2 text-sm hover:bg-white/5">Profile</Link>
+                  <button onClick={() => { setCustUserMenuOpen(false); setShowLogoutConfirm(true) }} className="w-full text-left px-3 py-2 text-sm hover:bg-white/5">Logout</button>
                 </div>
-                <div className="max-h-80 overflow-y-auto scrollbar-none">
-                  {custNotifs.length === 0 ? (
-                    <div className="p-3 text-xs text-slate-300">No notifications</div>
-                  ) : (
-                    custNotifs.slice(0, 20).map(n => (
-                      <div key={n.id} className="px-3 py-2 border-b border-white/5 text-sm flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="truncate"><span className="font-medium">{n.title || 'Update'}</span> • {n.message}</div>
-                          <div className="text-[11px] text-slate-400 truncate">{new Date(n.createdAt).toLocaleString()}</div>
-                        </div>
-                        <div className="shrink-0 flex items-center gap-2">
-                          <Link to={`/repairs/${n.repairId}`} onClick={() => setCustNotifOpen(false)} className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5 text-white">Open</Link>
-                          {!n.read && (
-                            <button className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5" onClick={() => { const next = custNotifs.map(x => x.id===n.id?{...x, read:true}:x); saveCustNotifs(next); setCustNotifs(next); }}>Mark read</button>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
 
@@ -298,120 +337,81 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             <img src={`${base}logo.svg`} alt="Electro-Repair" className="h-6 w-auto" />
             <span>Electro-Repair</span>
           </Link>
-          <div className="relative">
-            <button
-              aria-label="Notifications"
-              className="relative rounded-md border border-white/10 bg-white/5 px-3 py-2"
-              onClick={() => setCustNotifOpen(v => !v)}
-              ref={custBtnMobileRef}
-            >
-              🔔
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 inline-flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] h-5 min-w-[1.25rem] px-1">
-                  {unreadCount}
-                </span>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <button
+                aria-label="Notifications"
+                className="relative rounded-md border border-white/10 bg-white/5 px-3 py-2"
+                onClick={() => setCustNotifOpen(v => !v)}
+                ref={custBtnMobileRef}
+              >
+                🔔
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 inline-flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] h-5 min-w-[1.25rem] px-1">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+              {custNotifOpen && (
+                <div ref={custMenuMobileRef} className="absolute right-0 mt-2 w-80 max-w-[90vw] rounded-lg border border-white/10 bg-[#12151d] text-white shadow-xl z-40">
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+                    <div className="font-medium text-sm">Notifications</div>
+                    <button
+                      className="text-xs rounded border border-white/10 px-2 py-1 hover:bg-white/5"
+                      onClick={() => { const next = custNotifs.map(n => ({...n, read: true})); saveCustNotifs(next); setCustNotifs(next); }}
+                      disabled={unreadCount === 0}
+                    >Mark all read</button>
+                  </div>
+                  <div className="max-h-80 overflow-y-auto scrollbar-none">
+                    {custNotifs.length === 0 ? (
+                      <div className="p-3 text-xs text-slate-300">No notifications</div>
+                    ) : (
+                      custNotifs.slice(0, 20).map(n => (
+                        <div key={n.id} className="px-3 py-2 border-b border-white/5 text-sm flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="truncate"><span className="font-medium">{n.title || 'Update'}</span> • {n.message}</div>
+                            <div className="text-[11px] text-slate-400 truncate">{new Date(n.createdAt).toLocaleString()}</div>
+                          </div>
+                          <div className="shrink-0 flex items-center gap-2">
+                            <Link to={`/repairs/${n.repairId}`} onClick={() => setCustNotifOpen(false)} className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5 text-white">Open</Link>
+                            {!n.read && (
+                              <button className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5" onClick={() => { const next = custNotifs.map(x => x.id===n.id?{...x, read:true}:x); saveCustNotifs(next); setCustNotifs(next); }}>Mark read</button>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
               )}
-            </button>
-            {custNotifOpen && (
-              <div ref={custMenuMobileRef} className="absolute right-0 mt-2 w-80 max-w-[90vw] rounded-lg border border-white/10 bg-[#12151d] text-white shadow-xl z-40">
-                <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
-                  <div className="font-medium text-sm">Notifications</div>
-                  <button
-                    className="text-xs rounded border border-white/10 px-2 py-1 hover:bg-white/5"
-                    onClick={() => { const next = custNotifs.map(n => ({...n, read: true})); saveCustNotifs(next); setCustNotifs(next); }}
-                    disabled={unreadCount === 0}
-                  >Mark all read</button>
+            </div>
+            <div className="relative">
+              <button
+                ref={custUserBtnMobileRef}
+                aria-label="User menu"
+                className="h-9 w-9 rounded-full bg-white/10 border border-white/10 text-white flex items-center justify-center font-semibold"
+                onClick={() => setCustUserMenuOpen(v => !v)}
+              >
+                {(user?.firstName?.[0] || 'U')}{(user?.lastName?.[0] || '')}
+              </button>
+              {custUserMenuOpen && (
+                <div ref={custUserMenuMobileRef} className="absolute right-0 mt-2 w-44 rounded-lg border border-white/10 bg-[#12151d] text-white shadow-xl z-40">
+                  <div className="px-3 py-2 text-sm border-b border-white/10">{user?.firstName} {user?.lastName}</div>
+                  <Link to="/profile" onClick={() => setCustUserMenuOpen(false)} className="block px-3 py-2 text-sm hover:bg-white/5">Profile</Link>
+                  <button onClick={() => { setCustUserMenuOpen(false); setShowLogoutConfirm(true) }} className="w-full text-left px-3 py-2 text-sm hover:bg-white/5">Logout</button>
                 </div>
-                <div className="max-h-80 overflow-y-auto scrollbar-none">
-                  {custNotifs.length === 0 ? (
-                    <div className="p-3 text-xs text-slate-300">No notifications</div>
-                  ) : (
-                    custNotifs.slice(0, 20).map(n => (
-                      <div key={n.id} className="px-3 py-2 border-b border-white/5 text-sm flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="truncate"><span className="font-medium">{n.title || 'Update'}</span> • {n.message}</div>
-                          <div className="text-[11px] text-slate-400 truncate">{new Date(n.createdAt).toLocaleString()}</div>
-                        </div>
-                        <div className="shrink-0 flex items-center gap-2">
-                          <Link to={`/repairs/${n.repairId}`} onClick={() => setCustNotifOpen(false)} className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5 text-white">Open</Link>
-                          {!n.read && (
-                            <button className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5" onClick={() => { const next = custNotifs.map(x => x.id===n.id?{...x, read:true}:x); saveCustNotifs(next); setCustNotifs(next); }}>Mark read</button>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
 
         {/* On mobile, subtract the top bar (~3.5rem) so only the main scrolls */}
         <div className="relative flex gap-3 p-3 items-stretch h-[calc(100vh-3.5rem)] md:h-[calc(100vh-4rem)] overflow-hidden">
-          {/* Sidebar - desktop sticky full height (visible ≥ md) */}
-          <aside className="hidden md:flex w-60 shrink-0 flex-col rounded-2xl border border-white/10 bg-[#12151d] backdrop-blur shadow-sm p-4 sticky top-3 h-full text-white">
-            <nav className="flex flex-col gap-1 text-sm">
-              <Link to={homePath} className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 flex items-center gap-2 ${isActive('/') ? 'bg-white/10 border border-white/10' : ''}`}>
-                <span className="text-slate-300"><IconDashboard /></span>
-                <span>Dashboard</span>
-              </Link>
-              <Link to="/repairs" className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 flex items-center gap-2 ${isActive('/repairs') ? 'bg-white/10 border border-white/10' : ''}`}>
-                <span className="text-slate-300"><IconClipboard /></span>
-                <span>My Orders</span>
-              </Link>
-              <Link to="/repairs/new" className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 flex items-center gap-2 ${isActive('/repairs/new') ? 'bg-white/10 border border-white/10' : ''}`}>
-                <span className="text-slate-300"><IconPlus /></span>
-                <span>New Order</span>
-              </Link>
-            </nav>
-            <div className="mt-auto pt-4 border-t border-white/10 text-xs text-slate-300">
-              <div className="mb-2">{user?.firstName} {user?.lastName}</div>
-              <button onClick={() => setShowLogoutConfirm(true)} className="rounded-md border border-white/10 px-3 py-1.5 hover:bg-white/5 w-full text-white">Logout</button>
-            </div>
-          </aside>
-
-          {/* Main (independent scroll) */}
-          <main className="customer-main flex-1 overflow-y-auto scrollbar-none">
-            <div className="rounded-2xl border border-white/10 auth-card backdrop-blur p-4 shadow-sm ">
-              {children}
-            </div>
+          {/* Content area (customer pages render within Shell children below via routes) */}
+          <main className="flex-1 overflow-y-auto scrollbar-none rounded-2xl border border-white/10 bg-[#0b0d12]/60 backdrop-blur p-3">
+            {children}
           </main>
         </div>
-
-        {/* Mobile drawer sidebar */}
-        {open && (
-          <div className="fixed inset-0 z-30 md:hidden">
-            <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
-            <div className="absolute left-0 top-0 h-full w-72 bg-[#12151d] border-r border-white/10 shadow-xl p-4 flex flex-col text-white">
-              <div className="flex items-center justify-between mb-3">
-                <span className="font-semibold text-white flex items-center gap-2">
-                  <img src={`${base}logo.svg`} alt="Electro-Repair" className="h-6 w-auto" />
-                  <span>Electro-Repair</span>
-                </span>
-                <button aria-label="Close" className="rounded-md border border-white/10 px-2 py-1 hover:bg-white/5" onClick={() => setOpen(false)}>✕</button>
-              </div>
-              <nav className="flex flex-col gap-1 text-sm">
-                <Link onClick={() => setOpen(false)} to={homePath} className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 flex items-center gap-2 ${isActive('/') ? 'bg-white/10 border border-white/10' : ''}`}>
-                  <span className="text-slate-300"><IconDashboard /></span>
-                  <span>Dashboard</span>
-                </Link>
-                <Link onClick={() => setOpen(false)} to="/repairs" className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 flex items-center gap-2 ${isActive('/repairs') ? 'bg-white/10 border border-white/10' : ''}`}>
-                  <span className="text-slate-300"><IconClipboard /></span>
-                  <span>My Orders</span>
-                </Link>
-                <Link onClick={() => setOpen(false)} to="/repairs/new" className={`rounded-lg px-3 py-2 text-white hover:bg-white/5 flex items-center gap-2 ${isActive('/repairs/new') ? 'bg-white/10 border border-white/10' : ''}`}>
-                  <span className="text-slate-300"><IconPlus /></span>
-                  <span>New Order</span>
-                </Link>
-              </nav>
-              <div className="mt-auto pt-4 text-xs text-slate-300">
-                <div className="mb-2">{user?.firstName} {user?.lastName}</div>
-                <button onClick={() => { setOpen(false); logout(); }} className="rounded-md border border-white/10 px-3 py-1.5 hover:bg-white/5 w-full text-white">Logout</button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Local keyframes */}
         <style>{`
@@ -426,28 +426,15 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           .scrollbar-none::-webkit-scrollbar { width: 0; height: 0; display: none; }
         `}</style>
 
-      {/* Logout confirmation modal (dark themed) */}
-      {showLogoutConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowLogoutConfirm(false)} />
-          <div className="relative z-10 w-[92vw] max-w-sm rounded-xl border border-white/10 bg-[#12151d] text-white shadow-xl">
-            <div className="px-5 py-4 border-b border-white/10">
-              <h3 className="text-base font-semibold text-white">Confirm Logout</h3>
-              <p className="mt-1 text-sm text-slate-300">Are you sure you want to logout?</p>
-            </div>
-            <div className="px-5 py-4 flex items-center justify-end gap-2">
-              <button
-                className="rounded-md border border-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/5"
-                onClick={() => setShowLogoutConfirm(false)}
-              >Cancel</button>
-              <button
-                className="rounded-md bg-[#A48AFB] text-white px-3 py-1.5 text-sm hover:bg-[#9a80ff]"
-                onClick={() => { setShowLogoutConfirm(false); logout(); }}
-              >Logout</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={showLogoutConfirm}
+        title="Confirm Logout"
+        message="Are you sure you want to logout?"
+        cancelText="Cancel"
+        confirmText="Logout"
+        onCancel={() => setShowLogoutConfirm(false)}
+        onConfirm={() => { setShowLogoutConfirm(false); logout(); }}
+      />
       </div>
     )
   }
@@ -611,6 +598,27 @@ const App: React.FC = () => {
         }
       />
       <Route
+        path="/devices"
+        element={
+          <ProtectedRoute>
+            <Shell>
+              <MyDevices />
+            </Shell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <Shell>
+              <CustomerProfile />
+            </Shell>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
         path="/repairs/:id"
         element={
           <ProtectedRoute>
@@ -631,6 +639,17 @@ const App: React.FC = () => {
         }
       />
       <Route
+        path="/technician/profile"
+        element={
+          <TechnicianProtectedRoute>
+            <TechnicianShell>
+              <TechnicianProfilePage />
+            </TechnicianShell>
+          </TechnicianProtectedRoute>
+        }
+      />
+
+      <Route
         path="/technician/repairs/:id"
         element={
           <TechnicianProtectedRoute>
@@ -640,7 +659,6 @@ const App: React.FC = () => {
           </TechnicianProtectedRoute>
         }
       />
-      <Route path="*" element={<Navigate to="/" replace />} />
       {/* Admin area */}
       <Route
         path="/admin"
@@ -660,6 +678,7 @@ const App: React.FC = () => {
         <Route path="inventory" element={<AdminInventory />} />
         <Route path="payments" element={<AdminPayments />} />
         <Route path="analytics" element={<AdminAnalytics />} />
+        <Route path="profile" element={<AdminProfile />} />
       </Route>
     </Routes>
 

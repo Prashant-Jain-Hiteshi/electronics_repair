@@ -1,7 +1,9 @@
-import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { api } from '@/api/client'
-import ThemedSelect from '@/components/common/ThemedSelect'
+import { listMyDevices, linkDeviceToRepair, type CustomerDeviceDto } from '@/api/devices'
+import FormInput from '@/components/common/FormInput'
+import FormSelect from '@/components/common/FormSelect'
 
 const deviceTypes = [
   'Home Appliances',
@@ -13,6 +15,7 @@ const deviceTypes = [
 
 const CreateRepairOrder: React.FC = () => {
   const navigate = useNavigate()
+  const location = useLocation()
   const [deviceType, setDeviceType] = useState('')
   const [brand, setBrand] = useState('')
   const [model, setModel] = useState('')
@@ -25,6 +28,35 @@ const CreateRepairOrder: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [errors, setErrors] = useState<{ [k: string]: string }>({})
+
+  // Saved devices
+  const [devices, setDevices] = useState<CustomerDeviceDto[]>([])
+  const [devicesLoading, setDevicesLoading] = useState(false)
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('')
+
+  // Preselect device if navigated from MyDevices
+  useEffect(() => {
+    const st = (location.state || {}) as any
+    if (st && typeof st.preselectDeviceId === 'string') {
+      setSelectedDeviceId(st.preselectDeviceId)
+    }
+  }, [location.state])
+
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      setDevicesLoading(true)
+      try {
+        const list = await listMyDevices()
+        if (mounted) setDevices(list)
+      } catch {
+        // non-blocking
+      } finally {
+        if (mounted) setDevicesLoading(false)
+      }
+    })()
+    return () => { mounted = false }
+  }, [])
 
   
 
@@ -59,16 +91,32 @@ const CreateRepairOrder: React.FC = () => {
       }
       // POST JSON payload (no images)
       const { data } = await api.post('/repairs', payload)
+      const repairId = data?.repair?.id as string | undefined
+      // If a saved device was selected, link it to this repair (non-blocking toast on error)
+      if (repairId && selectedDeviceId) {
+        try { await linkDeviceToRepair(selectedDeviceId, repairId) } catch {}
+      }
 
       setSuccess('Repair order created successfully!')
+      try {
+        window.dispatchEvent(new CustomEvent('app:toast', { detail: { kind: 'success', message: 'Repair order created successfully!' } }))
+      } catch {}
       // Navigate to the newly created repair details to verify images immediately
-      if (data?.repair?.id) {
-        navigate(`/repairs/${data.repair.id}`)
+      if (repairId) {
+        navigate(`/repairs/${repairId}`)
       } else {
         navigate('/')
       }
     } catch (e: any) {
-      setError(e?.response?.data?.message || 'Failed to create repair order')
+      const normalized = e?.response?.data as { message?: string; errors?: Record<string, string[] >}
+      if (normalized?.errors && typeof normalized.errors === 'object') {
+        const next: { [k: string]: string } = {}
+        for (const [key, msgs] of Object.entries(normalized.errors)) {
+          if (Array.isArray(msgs) && msgs.length) next[key] = msgs[0]
+        }
+        setErrors(next)
+      }
+      setError(normalized?.message || 'Failed to create repair order')
     } finally {
       setSubmitting(false)
     }
@@ -162,45 +210,62 @@ const CreateRepairOrder: React.FC = () => {
           {success && <div className="mb-3 text-sm" style={{color:'#A48AFB'}}>{success}</div>}
 
           <form onSubmit={onSubmit} className="space-y-5">
+            {/* Optional saved device selection */}
+            <div className="rounded-lg border border-white/10 p-3">
+              <FormSelect
+                label="Attach Saved Device (optional)"
+                value={selectedDeviceId}
+                onChange={(e) => setSelectedDeviceId((e.target as HTMLSelectElement).value)}
+              >
+                <option value="">-- None --</option>
+                {devices.map(d => (
+                  <option key={d.id} value={d.id} className="bg-[#12151d] text-white">
+                    {d.deviceType} • {d.brand} {d.model}{d.serialNumber ? ` (SN: ${d.serialNumber})` : ''}
+                  </option>
+                ))}
+              </FormSelect>
+              <div className="mt-2 text-xs text-slate-400">{devicesLoading ? 'Loading devices…' : devices.length ? 'Selecting a saved device will link it to this repair for faster future intake.' : 'No saved devices yet'}</div>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-white mb-1">Device Type</label>
-                <ThemedSelect
-                  options={deviceTypes}
+                <FormSelect
+                  label="Device Type"
                   value={deviceType}
-                  onChange={setDeviceType}
-                  placeholder="Select type"
-                />
+                  onChange={(e) => setDeviceType((e.target as HTMLSelectElement).value)}
+                >
+                  <option value="" disabled>Select type</option>
+                  {deviceTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                </FormSelect>
                 <p className="text-xs text-slate-300 mt-1">E.g., Laptop, Phone, Tablet</p>
                 {errors.deviceType && <p className="text-xs text-red-400 mt-1">{errors.deviceType}</p>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-white mb-1">Brand</label>
-                <input
-                  className={`input border bg-transparent text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#A48AFB] focus:border-[#A48AFB] ${errors.brand ? 'border-red-500 ring-2 ring-red-500' : 'border-white/10'}`}
+                <FormInput
+                  label="Brand"
                   value={brand}
-                  onChange={(e) => { setBrand(e.target.value); if (errors.brand) setErrors(prev => ({ ...prev, brand: '' })) }}
+                  onChange={(e) => { setBrand((e.target as HTMLInputElement).value); if (errors.brand) setErrors(prev => ({ ...prev, brand: '' })) }}
                   placeholder="Apple, Samsung, Dell..."
+                  error={errors.brand}
                 />
                 {errors.brand && <p className="text-xs text-red-400 mt-1">{errors.brand}</p>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-white mb-1">Model</label>
-                <input
-                  className={`input border bg-transparent text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#A48AFB] focus:border-[#A48AFB] ${errors.model ? 'border-red-500 ring-2 ring-red-500' : 'border-white/10'}`}
+                <FormInput
+                  label="Model"
                   value={model}
-                  onChange={(e) => { setModel(e.target.value); if (errors.model) setErrors(prev => ({ ...prev, model: '' })) }}
+                  onChange={(e) => { setModel((e.target as HTMLInputElement).value); if (errors.model) setErrors(prev => ({ ...prev, model: '' })) }}
                   placeholder="Model name or number"
+                  error={errors.model}
                 />
                 {errors.model && <p className="text-xs text-red-400 mt-1">{errors.model}</p>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-white mb-1">Device Name</label>
-                <input
-                  className={`input border bg-transparent text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#A48AFB] focus:border-[#A48AFB] ${errors.deviceName ? 'border-red-500 ring-2 ring-red-500' : 'border-white/10'}`}
+                <FormInput
+                  label="Device Name"
                   value={deviceName}
-                  onChange={(e) => { setDeviceName(e.target.value); if (errors.deviceName) setErrors(prev => ({ ...prev, deviceName: '' })) }}
+                  onChange={(e) => { setDeviceName((e.target as HTMLInputElement).value); if (errors.deviceName) setErrors(prev => ({ ...prev, deviceName: '' })) }}
                   placeholder="Washing machine, TV, Mobile phone"
+                  error={errors.deviceName}
                 />
                 {errors.deviceName && <p className="text-xs text-red-400 mt-1">{errors.deviceName}</p>}
               </div>

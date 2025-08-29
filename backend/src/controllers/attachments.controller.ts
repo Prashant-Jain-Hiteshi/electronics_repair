@@ -2,6 +2,7 @@ import { Request, Response } from 'express'
 import fs from 'fs'
 import path from 'path'
 import { RepairOrder, Customer, RepairAttachment } from '../models'
+import { RepairStatus } from '../models/RepairOrder'
 
 function ensureDir(p: string) {
   if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true })
@@ -10,7 +11,7 @@ function ensureDir(p: string) {
 export async function listAttachments(req: Request, res: Response) {
   try {
     const { id } = req.params // repairOrderId
-    const repair = await RepairOrder.findByPk(id)
+    const repair = await RepairOrder.findByPk(id, { attributes: ['id', 'customerId'] as any })
     if (!repair) return res.status(404).json({ message: 'Repair order not found' })
 
     // If customer, ensure ownership
@@ -42,8 +43,11 @@ export async function listAttachments(req: Request, res: Response) {
 export async function uploadAttachments(req: Request, res: Response) {
   try {
     const { id } = req.params // repairOrderId
-    const repair = await RepairOrder.findByPk(id)
+    const repair = await RepairOrder.findByPk(id, { attributes: ['id', 'customerId', 'status'] as any })
     if (!repair) return res.status(404).json({ message: 'Repair order not found' })
+    if ((repair as any).status === RepairStatus.CANCELLED) {
+      return res.status(409).json({ message: 'Repair order is cancelled and read-only' })
+    }
 
     const anyReq: any = req
     if (anyReq.user?.role === 'customer' && anyReq.user?.id) {
@@ -83,8 +87,11 @@ export async function deleteAttachment(req: Request, res: Response) {
     const att = await RepairAttachment.findByPk(attachmentId)
     if (!att || att.repairOrderId !== id) return res.status(404).json({ message: 'Attachment not found' })
 
-    const repair = await RepairOrder.findByPk(id)
+    const repair = await RepairOrder.findByPk(id, { attributes: ['id', 'customerId', 'status'] as any })
     if (!repair) return res.status(404).json({ message: 'Repair order not found' })
+    if ((repair as any).status === RepairStatus.CANCELLED) {
+      return res.status(409).json({ message: 'Repair order is cancelled and read-only' })
+    }
 
     const anyReq: any = req
     // Allow: admin/technician, or uploader

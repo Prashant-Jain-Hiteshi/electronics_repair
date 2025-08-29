@@ -1,4 +1,6 @@
 import { Request, Response } from 'express';
+import { v4 as uuidv4 } from 'uuid';
+
 import fs from 'fs';
 import path from 'path';
 import { AuthRequest } from '../middleware/auth';
@@ -228,7 +230,33 @@ export async function listMyRepairs(req: AuthRequest, res: Response) {
     if (!req.user?.id) return res.status(401).json({ message: 'Unauthorized' });
     // Ensure a customer row exists for this user (no external checks, silent create)
     const [cust] = await Customer.findOrCreate({ where: { userId: req.user.id }, defaults: { userId: req.user.id } });
-    const repairs = await RepairOrder.findAll({ where: { customerId: (cust as any).id } });
+    // Select only stable columns that are guaranteed to exist in DB to avoid 500s
+    const repairs = await (RepairOrder as any).findAll({
+      where: { customerId: (cust as any).id },
+      attributes: [
+        'id',
+        'customerId',
+        'technicianId',
+        'locationId',
+        'deviceType',
+        'brand',
+        'model',
+        'serialNumber',
+        'issueDescription',
+        'diagnosis',
+        'repairNotes',
+        'status',
+        'priority',
+        'estimatedCost',
+        'actualCost',
+        'estimatedCompletionDate',
+        'actualCompletionDate',
+        'warrantyPeriod',
+        'createdAt',
+        'updatedAt',
+      ],
+      order: [['createdAt', 'DESC']] as any,
+    });
     return res.status(200).json({ repairs });
   } catch (err) {
     console.error('List my repairs error:', err);
@@ -262,7 +290,9 @@ export async function createRepair(req: AuthRequest, res: Response) {
 
     const estimatedCompletionDate = pickupDate ? new Date(pickupDate) : undefined;
 
+    const newId = uuidv4();
     const payload: Partial<RepairOrder> = {
+      id: newId as any,
       customerId,
       deviceType,
       brand,
@@ -273,7 +303,17 @@ export async function createRepair(req: AuthRequest, res: Response) {
       estimatedCompletionDate,
     } as any;
 
-    const repair = await RepairOrder.create(payload as any);
+    // Dynamically include only columns that are defined; avoid optional fields on older DBs
+    const baseFields = ['id', 'customerId', 'deviceType', 'brand', 'model', 'issueDescription', 'status', 'priority'] as string[];
+    const fields = [...baseFields, ...(estimatedCompletionDate ? ['estimatedCompletionDate'] : [])];
+    let repair: any;
+    try {
+      repair = await RepairOrder.create(payload as any, { fields, returning: false } as any);
+    } catch (e: any) {
+      console.warn('Create repair failed with fields', fields, '->', e?.message);
+      // Retry with minimal base fields only
+      repair = await RepairOrder.create(payload as any, { fields: baseFields, returning: false } as any);
+    }
 
     // Persist any uploaded images as attachments
     const files = ((req as any).files as Express.Multer.File[] | undefined) || [];
@@ -313,9 +353,9 @@ export async function createRepair(req: AuthRequest, res: Response) {
     // Notify admins in real-time that a new repair has been created
     try {
       const productName = `${(repair as any).deviceType || ''} ${(repair as any).brand || ''} ${(repair as any).model || ''}`.trim();
-      emitToRole('admin', 'admin:notification:new', {
-        kind: 'new_repair',
+      emitToRole('admin', 'repair:new', {
         id: (repair as any).id,
+        customerId: (repair as any).customerId,
         deviceType: (repair as any).deviceType,
         brand: (repair as any).brand,
         model: (repair as any).model,
@@ -325,6 +365,26 @@ export async function createRepair(req: AuthRequest, res: Response) {
       });
     } catch (notifyErr) {
       console.error('Failed to emit admin new repair notification:', notifyErr);
+    }
+
+    // Notify customer in-app about the created repair order
+    try {
+      const customer = await Customer.findByPk((repair as any).customerId);
+      if (customer) {
+        const u = await User.findByPk((customer as any).userId);
+        if (u) {
+          emitToUser((u as any).id, 'repair:created', {
+            id: (repair as any).id,
+            status: (repair as any).status,
+            deviceType: (repair as any).deviceType,
+            brand: (repair as any).brand,
+            model: (repair as any).model,
+            createdAt: (repair as any).createdAt,
+          });
+        }
+      }
+    } catch (custNotifyErr) {
+      console.error('Failed to emit customer repair created notification:', custNotifyErr);
     }
 
     return res.status(201).json({ repair, attachments: createdAttachments });
@@ -340,6 +400,9 @@ export async function updateRepair(req: AuthRequest, res: Response) {
     const { id } = req.params;
     const repair = await RepairOrder.findByPk(id);
     if (!repair) return res.status(404).json({ message: 'Repair order not found' });
+    if ((repair as any).status === RepairStatus.CANCELLED) {
+      return res.status(409).json({ message: 'Repair order is cancelled and read-only' });
+    }
     const prevStatus = repair.status;
 
     const body = req.body || {};
@@ -436,6 +499,24 @@ export async function updateRepair(req: AuthRequest, res: Response) {
           from: prevStatus,
           to: newStatus,
         });
+
+        // Real-time notify customer about status change
+        try {
+          const customer = await Customer.findByPk((repair as any).customerId);
+          if (customer) {
+            const u = await User.findByPk((customer as any).userId);
+            if (u) {
+              emitToUser((u as any).id, 'repair:status', {
+                id: (repair as any).id,
+                status: newStatus,
+                from: prevStatus,
+                at: new Date().toISOString(),
+              });
+            }
+          }
+        } catch (statusEmitErr) {
+          console.error('Failed to emit customer repair status notification:', statusEmitErr);
+        }
       }
     } catch (auditErr) {
       console.warn('Audit log failed (status_change):', auditErr);
@@ -452,7 +533,21 @@ export async function updateRepair(req: AuthRequest, res: Response) {
 export async function getChecklist(req: AuthRequest, res: Response) {
   try {
     const { id } = req.params;
-    const repair = await RepairOrder.findByPk(id);
+    const repair = await RepairOrder.findByPk(id, {
+      attributes: [
+        'id',
+        'customerId',
+        'checklist',
+        'checklistPassed',
+        'checklistByUserId',
+        'checklistAt',
+        'qaRequired',
+        'qaApproved',
+        'qaByUserId',
+        'qaAt',
+        'qaNotes',
+      ] as any,
+    });
     if (!repair) return res.status(404).json({ message: 'Repair order not found' });
 
     // If customer, ensure ownership
@@ -487,8 +582,11 @@ export async function saveChecklist(req: AuthRequest, res: Response) {
   try {
     const { id } = req.params;
     const { checklist, passed } = req.body || {};
-    const repair = await RepairOrder.findByPk(id);
+    const repair = await RepairOrder.findByPk(id, { attributes: ['id', 'customerId', 'status'] as any });
     if (!repair) return res.status(404).json({ message: 'Repair order not found' });
+    if ((repair as any).status === RepairStatus.CANCELLED) {
+      return res.status(409).json({ message: 'Repair order is cancelled and read-only' });
+    }
 
     // Only technician or admin can submit checklist
     const role = (req.user as any)?.role;
@@ -536,8 +634,11 @@ export async function qaSignOff(req: AuthRequest, res: Response) {
   try {
     const { id } = req.params;
     const { approved, notes } = req.body || {};
-    const repair = await RepairOrder.findByPk(id);
+    const repair = await RepairOrder.findByPk(id, { attributes: ['id', 'customerId', 'status', 'checklistPassed', 'qaRequired', 'qaApproved', 'qaByUserId', 'qaAt', 'qaNotes'] as any });
     if (!repair) return res.status(404).json({ message: 'Repair order not found' });
+    if ((repair as any).status === RepairStatus.CANCELLED) {
+      return res.status(409).json({ message: 'Repair order is cancelled and read-only' });
+    }
 
     const role = (req.user as any)?.role;
     if (role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
@@ -578,10 +679,13 @@ export async function qaSetRequired(req: AuthRequest, res: Response) {
   try {
     const { id } = req.params;
     const { required } = req.body || {};
-    const repair = await RepairOrder.findByPk(id);
+    const repair = await RepairOrder.findByPk(id, { attributes: ['id', 'customerId', 'status'] as any });
     if (!repair) return res.status(404).json({ message: 'Repair order not found' });
     const role = (req.user as any)?.role;
     if (role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
+    if ((repair as any).status === RepairStatus.CANCELLED) {
+      return res.status(409).json({ message: 'Repair order is cancelled and read-only' });
+    }
 
     (repair as any).qaRequired = Boolean(required);
     // If disabling QA requirement, clear pending QA state
@@ -613,9 +717,11 @@ export async function assignTechnician(req: AuthRequest, res: Response) {
     const { id } = req.params; // repairOrderId
     const { technicianId, start, end, capacityUnits, requiredSkills } = req.body || {};
     if (!technicianId) return res.status(400).json({ message: 'technicianId is required' });
-
-    const repair = await RepairOrder.findByPk(id);
+    const repair = await RepairOrder.findByPk(id, { attributes: ['id', 'customerId', 'technicianId', 'deviceType', 'brand', 'model', 'status'] as any });
     if (!repair) return res.status(404).json({ message: 'Repair order not found' });
+    if ((repair as any).status === RepairStatus.CANCELLED) {
+      return res.status(409).json({ message: 'Repair order is cancelled and read-only' });
+    }
 
     const tech = await User.findByPk(technicianId);
     if (!tech || (tech as any).role !== UserRole.TECHNICIAN) {
@@ -740,7 +846,7 @@ export async function adminOverview(_req: AuthRequest, res: Response) {
 export async function listRepairParts(req: AuthRequest, res: Response) {
   try {
     const { id } = req.params; // repairOrderId
-    const repair = await RepairOrder.findByPk(id);
+    const repair = await RepairOrder.findByPk(id, { attributes: ['id', 'customerId'] as any });
     if (!repair) return res.status(404).json({ message: 'Repair order not found' });
 
     // If called by a customer, ensure they own this repair
@@ -754,8 +860,18 @@ export async function listRepairParts(req: AuthRequest, res: Response) {
 
     const parts = await RepairPart.findAll({
       where: { repairOrderId: id },
-      include: [{ model: Inventory, as: 'Inventory' as any, required: false } as any],
+      attributes: ['id', 'repairOrderId', 'inventoryId', 'quantity', 'unitPrice', 'createdAt'] as any,
+      include: [
+        {
+          model: Inventory as any,
+          as: 'Inventory' as any,
+          required: false,
+          attributes: ['id', 'name', 'sku', 'price', 'brand', 'sellingPrice'] as any,
+        } as any,
+      ],
+      order: [['createdAt', 'ASC']] as any,
     });
+
     return res.status(200).json({ parts });
   } catch (err) {
     console.error('List repair parts error:', err);
@@ -764,7 +880,7 @@ export async function listRepairParts(req: AuthRequest, res: Response) {
 }
 
 // Add a part to a repair order and decrement inventory
-export async function addRepairPart(req: Request, res: Response) {
+export async function addRepairPart(req: AuthRequest, res: Response) {
   const t = await sequelize.transaction();
   try {
     const { id } = req.params; // repairOrderId
@@ -774,10 +890,14 @@ export async function addRepairPart(req: Request, res: Response) {
       return res.status(400).json({ message: 'inventoryId and quantity (>0) are required' });
     }
 
-    const repair = await RepairOrder.findByPk(id, { transaction: t });
+    const repair = await RepairOrder.findByPk(id, { attributes: ['id', 'customerId', 'status'], transaction: t });
     if (!repair) {
       await t.rollback();
       return res.status(404).json({ message: 'Repair order not found' });
+    }
+    if ((repair as any).status === RepairStatus.CANCELLED) {
+      await t.rollback();
+      return res.status(409).json({ message: 'Repair order is cancelled and read-only' });
     }
 
     // Enforce: diagnostics must be completed before ordering parts (technician scope)
@@ -798,6 +918,7 @@ export async function addRepairPart(req: Request, res: Response) {
     } catch (diagCheckErr) {
       console.warn('Diagnostics enforcement check failed:', diagCheckErr);
     }
+
     const inv = await Inventory.findByPk(inventoryId, { transaction: t });
     if (!inv) {
       await t.rollback();
@@ -856,6 +977,32 @@ export async function addRepairPart(req: Request, res: Response) {
     }
 
     await t.commit();
+
+    // Real-time notify customer: potential cost change / extra parts
+    try {
+      const repairRef = await RepairOrder.findByPk(id);
+      if (repairRef) {
+        const customer = await Customer.findByPk((repairRef as any).customerId);
+        if (customer) {
+          const u = await User.findByPk((customer as any).userId);
+          if (u) {
+            const delta = Number(unitPrice || 0) * Number(quantity || 0);
+            emitToUser((u as any).id, 'repair:cost_change', {
+              repairOrderId: id,
+              partId: (rp as any).id,
+              inventoryId,
+              quantity,
+              unitPrice: unitPrice || null,
+              delta,
+              at: new Date().toISOString(),
+            });
+          }
+        }
+      }
+    } catch (custPartNotifyErr) {
+      console.error('Failed to emit customer cost change notification:', custPartNotifyErr);
+    }
+
     return res.status(201).json({ part: rp });
   } catch (err) {
     await t.rollback();
@@ -873,6 +1020,16 @@ export async function removeRepairPart(req: Request, res: Response) {
     if (!part) {
       await t.rollback();
       return res.status(404).json({ message: 'Repair part not found' });
+    }
+
+    const repair = await RepairOrder.findByPk(id, { transaction: t });
+    if (!repair) {
+      await t.rollback();
+      return res.status(404).json({ message: 'Repair order not found' });
+    }
+    if ((repair as any).status === RepairStatus.CANCELLED) {
+      await t.rollback();
+      return res.status(409).json({ message: 'Repair order is cancelled and read-only' });
     }
 
     const inv = await Inventory.findByPk(part.inventoryId, { transaction: t });
@@ -913,7 +1070,20 @@ export async function removeRepairPart(req: Request, res: Response) {
 export async function getRepairInvoice(req: Request, res: Response) {
   try {
     const { id } = req.params;
-    const repair = await RepairOrder.findByPk(id);
+    const repair = await RepairOrder.findByPk(id, {
+      attributes: [
+        'id',
+        'customerId',
+        'deviceType',
+        'brand',
+        'model',
+        'status',
+        'estimatedCost',
+        'actualCost',
+        'createdAt',
+        'updatedAt',
+      ],
+    });
     if (!repair) return res.status(404).json({ message: 'Repair order not found' });
     // If called by a customer, ensure ownership
     const reqAny = req as any;
@@ -924,7 +1094,7 @@ export async function getRepairInvoice(req: Request, res: Response) {
       }
     }
 
-    const customer = await Customer.findByPk(repair.customerId);
+    const customer = await Customer.findByPk(repair.customerId as any);
     const parts = (await RepairPart.findAll({
       where: { repairOrderId: id },
       include: [{ model: Inventory, as: 'Inventory' as any, required: false } as any],
@@ -957,7 +1127,17 @@ export async function cancelRepair(req: AuthRequest, res: Response) {
     const { id } = req.params;
     if (!req.user?.id) return res.status(401).json({ message: 'Unauthorized' });
 
-    const repair = await RepairOrder.findByPk(id);
+    const repair = await RepairOrder.findByPk(id, {
+      attributes: [
+        'id',
+        'customerId',
+        'deviceType',
+        'brand',
+        'model',
+        'status',
+      ],
+    });
+
     if (!repair) return res.status(404).json({ message: 'Repair order not found' });
 
     // If customer, ensure ownership

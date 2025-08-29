@@ -13,6 +13,7 @@ interface UserAttributes {
   firstName: string;
   lastName: string;
   address?: string | null;
+  avatarUrl?: string | null;
   locationId?: string | null;
   role: UserRole;
   isActive: boolean;
@@ -38,6 +39,7 @@ class User
   public firstName!: string;
   public lastName!: string;
   public address?: string | null;
+  public avatarUrl?: string | null;
   public locationId?: string | null;
   public role!: UserRole;
   public isActive!: boolean;
@@ -78,6 +80,10 @@ User.init(
       allowNull: false,
     },
     address: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    avatarUrl: {
       type: DataTypes.STRING,
       allowNull: true,
     },

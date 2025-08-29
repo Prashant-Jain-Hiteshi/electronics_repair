@@ -117,8 +117,97 @@ const Inventory: React.FC = () => {
         <h1 className="text-xl font-semibold tracking-tight text-white">Inventory</h1>
         <div className="flex gap-2">
           <button className="btn btn-sm" onClick={() => setScanOpen(true)}>Scan Barcode</button>
+          <button
+            className="btn btn-sm"
+            onClick={() => {
+              // Export CSV of current rows
+              const headers = ['partName','partNumber','category','quantity','minStockLevel','unitCost','sellingPrice','brand','supplier','location','description','isActive']
+              const csvRows = [
+                headers.join(','),
+                ...rows.map(r => headers.map(h => {
+                  const val: any = (r as any)[h]
+                  const s = val === undefined || val === null ? '' : String(val)
+                  // basic CSV escaping
+                  const needsQuote = s.includes(',') || s.includes('"') || s.includes('\n')
+                  const esc = s.replace(/"/g, '""')
+                  return needsQuote ? `"${esc}"` : esc
+                }).join(','))
+              ].join('\n')
+              const blob = new Blob([csvRows], { type: 'text/csv;charset=utf-8;' })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = `inventory_${new Date().toISOString().slice(0,10)}.csv`
+              a.click()
+              URL.revokeObjectURL(url)
+            }}
+          >Export CSV</button>
+          <label className="btn btn-sm cursor-pointer">
+            Import CSV
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                try {
+                  const text = await file.text()
+                  const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0)
+                  if (lines.length <= 1) return
+                  const headers = lines[0].split(',').map(h => h.trim())
+                  const toItem = (obj: any): Partial<Item> => ({
+                    partName: obj.partName || obj.PartName,
+                    partNumber: obj.partNumber || obj.SKU || obj.partNo,
+                    category: obj.category || '',
+                    quantity: Number(obj.quantity || 0),
+                    minStockLevel: Number(obj.minStockLevel || 5),
+                    unitCost: Number(obj.unitCost || 0),
+                    sellingPrice: Number(obj.sellingPrice || 0),
+                    brand: obj.brand || '',
+                    supplier: obj.supplier || '',
+                    location: obj.location || '',
+                    description: obj.description || '',
+                    isActive: String(obj.isActive ?? 'true').toLowerCase() !== 'false',
+                  })
+                  const items: Partial<Item>[] = []
+                  for (let i = 1; i < lines.length; i++) {
+                    const raw = [] as string[]
+                    // basic CSV parse with quotes
+                    let cur = ''
+                    let inQ = false
+                    for (const ch of lines[i]) {
+                      if (ch === '"') { inQ = !inQ; cur += ch; continue }
+                      if (ch === ',' && !inQ) { raw.push(cur); cur = ''; continue }
+                      cur += ch
+                    }
+                    raw.push(cur)
+                    const values = raw.map(v => v.trim().replace(/^"|"$/g, '').replace(/""/g, '"'))
+                    const obj: any = {}
+                    headers.forEach((h, idx) => obj[h] = values[idx])
+                    items.push(toItem(obj))
+                  }
+                  // Persist by creating items individually to avoid relying on a bulk API
+                  for (const it of items) {
+                    try { await api.post('/inventory', it) } catch {}
+                  }
+                  await load()
+                } catch {
+                  // noop
+                } finally {
+                  e.currentTarget.value = ''
+                }
+              }}
+            />
+          </label>
         </div>
       </div>
+      {/* Low-stock banner */}
+      {rows.some(r => Number(r.quantity) <= Number(r.minStockLevel)) && (
+        <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-sm text-amber-200">
+          Low stock alerts: {rows.filter(r => Number(r.quantity) <= Number(r.minStockLevel)).length} item(s) at or below minimum. Consider reordering.
+        </div>
+      )}
       {error && (
         <Toast kind="error" onClose={() => setError(null)} autoHideMs={5000}>
           {error}
@@ -137,7 +226,11 @@ const Inventory: React.FC = () => {
           <FormInput label="Part Name" placeholder="e.g., Battery" value={form.partName as string} onChange={e=>setForm({...form, partName: e.currentTarget.value})} />
           <FormInput label="Part Number (SKU)" placeholder="e.g., BAT-IPH12" value={form.partNumber as string} onChange={e=>setForm({...form, partNumber: e.currentTarget.value})} />
           <FormInput label="Category" placeholder="e.g., Power" value={form.category as string} onChange={e=>setForm({...form, category: e.currentTarget.value})} />
+          <FormInput label="Supplier (optional)" placeholder="e.g., ACME Parts" value={form.supplier as string} onChange={e=>setForm({...form, supplier: e.currentTarget.value})} />
+          <FormInput label="Brand (optional)" placeholder="e.g., Apple" value={form.brand as string} onChange={e=>setForm({...form, brand: e.currentTarget.value})} />
+          <FormInput label="Location (bin)" placeholder="e.g., A1-3" value={form.location as string} onChange={e=>setForm({...form, location: e.currentTarget.value})} />
         </div>
+        <div className="text-xs text-slate-300">Tip: Use "Supplier" to quickly add a supplier name; no catalog required.</div>
         <button
           className="btn"
           disabled={creating}
@@ -430,7 +523,7 @@ const Inventory: React.FC = () => {
             <FormInput label="Repair Order ID" placeholder="e.g., 94b7c0..." value={reserveRepairId} onChange={e=>setReserveRepairId(e.currentTarget.value)} />
             <FormInput label="Quantity" type="number" value={reserveQty as any} onChange={e=>setReserveQty(Number(e.currentTarget.value))} />
             <FormInput label="Note (optional)" value={reserveNote} onChange={e=>setReserveNote(e.currentTarget.value)} />
-            <div className="text-xs text-slate-300">Available: {reserveFor.quantity}</div>
+            <div className="text-xs text-slate-300">Available: {reserveFor.quantity}. Reserving will hold stock for the specified repair; consumption happens later when used.</div>
           </div>
         </Modal>
       )}
@@ -503,6 +596,7 @@ const Inventory: React.FC = () => {
                 <div><span className="text-slate-300">Repair:</span> {scanFound.repairOrderId}</div>
                 <div><span className="text-slate-300">Qty:</span> {scanFound.reservedQty || Math.abs(scanFound.quantityChange)}</div>
                 <div><span className="text-slate-300">Status:</span> {scanFound.status || 'reserved'}</div>
+                <div className="text-xs text-slate-300 mt-1">Workflow: Pick when part is retrieved from shelf, then Confirm Consume after installation.</div>
               </div>
             )}
           </div>

@@ -17,7 +17,7 @@ router.post(
 router.post(
   '/verify-otp',
   [
-    body('mobile').isString().notEmpty(),
+    body('mobile').matches(/^(\d{10})$/).withMessage('Valid Indian mobile is required'),
     body('otp').isLength({ min: 6, max: 6 }),
     body('firstName').optional().isString(),
     body('lastName').optional().isString(),

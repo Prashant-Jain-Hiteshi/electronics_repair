@@ -7,7 +7,12 @@ import { DataTypes } from 'sequelize';
 import { PaymentKind, PaymentProvider } from './models/Payment';
 import './models'; // initialize models and associations
 import { createServer } from 'http';
-import { initSocket } from './socket';
+import { initSocket, emitToRole } from './socket';
+import { runAnalyticsRollups } from './jobs/analytics';
+import { runSlaChecks } from './jobs/sla';
+import { ApprovalRequest, Customer, User, Feedback } from './models';
+import { ApprovalStatus } from './models/ApprovalRequest';
+import { notify } from './services/notifications.service';
 // Reverted: Time Tracking & Bench Utilization background jobs
 // import { startBackgroundJobs } from './jobs/scheduler';
 
@@ -61,6 +66,13 @@ async function start() {
       await ensure('payments', 'linkUrl', { type: DataTypes.TEXT as any, allowNull: true });
       await ensure('payments', 'paidAt', { type: DataTypes.DATE as any, allowNull: true });
       await ensure('payments', 'notes', { type: DataTypes.TEXT as any, allowNull: true });
+
+      // users columns expected by current model (hotfix for prod where alter=false)
+      await ensure('users', 'avatarUrl', { type: DataTypes.STRING as any, allowNull: true });
+      await ensure('users', 'otpCode', { type: DataTypes.STRING as any, allowNull: true });
+      await ensure('users', 'otpExpiresAt', { type: DataTypes.DATE as any, allowNull: true });
+      await ensure('users', 'isVerified', { type: DataTypes.BOOLEAN as any, allowNull: false, defaultValue: false });
+      await ensure('users', 'isActive', { type: DataTypes.BOOLEAN as any, allowNull: false, defaultValue: true });
     } catch (preSyncErr) {
       console.warn('Pre-sync column ensure failed (continuing):', (preSyncErr as any)?.message || preSyncErr);
     }
@@ -74,8 +86,81 @@ async function start() {
     const server = createServer(app);
     initSocket(server);
 
-    // Reverted: do not start background jobs
-    const stopJobs = undefined as unknown as (() => void) | undefined;
+    // Lightweight scheduled job: expire approvals past tokenExpiresAt
+    const jobs: NodeJS.Timeout[] = [];
+    const expireApprovalsJob = setInterval(async () => {
+      try {
+        const now = new Date();
+        const pending = await ApprovalRequest.findAll({
+          where: { status: ApprovalStatus.PENDING },
+        });
+        for (const a of pending) {
+          if (a.tokenExpiresAt && a.tokenExpiresAt < now) {
+            a.status = ApprovalStatus.EXPIRED;
+            await a.save();
+            // notify customer
+            const customer = await Customer.findByPk(a.customerId);
+            const user = customer ? await User.findByPk(customer.userId) : null;
+            if (user) {
+              await notify({ userId: user.id, event: 'approval:expired', data: { id: a.id, repairOrderId: a.repairOrderId }, channels: ['in_app', 'email'] });
+            }
+          }
+        }
+      } catch (e) {
+        try { console.warn('[jobs] expireApprovalsJob error', (e as any)?.message || e) } catch {}
+      }
+    }, 5 * 60 * 1000); // every 5 minutes
+    jobs.push(expireApprovalsJob);
+
+    // Low-rating feedback notifier: alert admins for any feedback with rating <= threshold and not yet notified
+    const LOW_RATING_THRESHOLD = parseInt(process.env.LOW_RATING_THRESHOLD || '2', 10);
+    const lowRatingNotifier = setInterval(async () => {
+      try {
+        const pending = await Feedback.findAll({ where: { notifiedLowRating: false } as any });
+        for (const f of pending as any[]) {
+          try {
+            if (typeof f.rating === 'number' && f.rating <= LOW_RATING_THRESHOLD) {
+              // Emit to admins via socket room; optionally extend to email in notifications.service
+              emitToRole('admin', 'feedback:low_rating', {
+                id: f.id,
+                repairOrderId: f.repairOrderId,
+                rating: f.rating,
+                npsScore: f.npsScore ?? null,
+                at: new Date().toISOString(),
+              });
+              f.notifiedLowRating = true;
+              await f.save();
+            }
+          } catch (inner) {
+            try { console.warn('[jobs] lowRatingNotifier per-item error', (inner as any)?.message || inner) } catch {}
+          }
+        }
+      } catch (e) {
+        try { console.warn('[jobs] lowRatingNotifier error', (e as any)?.message || e) } catch {}
+      }
+    }, 5 * 60 * 1000); // every 5 minutes
+    jobs.push(lowRatingNotifier);
+
+    // Background analytics rollups (e.g., revenue.daily)
+    if (process.env.ENABLE_ANALYTICS_JOBS !== 'false') {
+      const analyticsJob = setInterval(async () => {
+        try { await runAnalyticsRollups(); } catch (e) {
+          try { console.warn('[jobs] analytics error', (e as any)?.message || e) } catch {}
+        }
+      }, parseInt(process.env.ANALYTICS_JOB_INTERVAL_MS || String(15 * 60 * 1000), 10)); // every 15 minutes by default
+      jobs.push(analyticsJob);
+    }
+
+    // SLA policy checks and escalation logs
+    if (process.env.ENABLE_SLA_JOBS !== 'false') {
+      const slaJob = setInterval(async () => {
+        try { await runSlaChecks(); } catch (e) {
+          try { console.warn('[jobs] sla error', (e as any)?.message || e) } catch {}
+        }
+      }, parseInt(process.env.SLA_JOB_INTERVAL_MS || String(5 * 60 * 1000), 10)); // every 5 minutes by default
+      jobs.push(slaJob);
+    }
+    const stopJobs = () => jobs.forEach((t) => clearInterval(t as unknown as NodeJS.Timeout));
 
     // graceful shutdown
     const shutdown = () => {

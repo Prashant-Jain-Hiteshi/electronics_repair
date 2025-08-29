@@ -16,6 +16,13 @@ import slaRoutes from './routes/sla.routes';
 import auditRoutes from './routes/audit.routes';
 import diagnosticsRoutes from './routes/diagnostics.routes';
 import worklogsRoutes from './routes/worklogs.routes';
+import appointmentsRoutes from './routes/appointments.routes';
+import approvalsRoutes from './routes/approvals.routes';
+import rmaRoutes from './routes/rma.routes';
+import warrantyRoutes from './routes/warranty.routes';
+import feedbackRoutes from './routes/feedback.routes';
+import devicesRoutes from './routes/devices.routes';
+import usersRoutes from './routes/users.routes';
 import path from 'path';
 import { Request, Response } from 'express';
 
@@ -57,6 +64,7 @@ app.get('/health', (_req: Request, res: Response) => {
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/users', usersRoutes);
 app.use('/api/customers', customersRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/repairs', repairsRoutes);
@@ -71,6 +79,12 @@ app.use('/api/sla', slaRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/diagnostics', diagnosticsRoutes);
 app.use('/api/worklogs', worklogsRoutes);
+app.use('/api/appointments', appointmentsRoutes);
+app.use('/api/approvals', approvalsRoutes);
+app.use('/api/rma', rmaRoutes);
+app.use('/api/warranty', warrantyRoutes);
+app.use('/api/feedback', feedbackRoutes);
+app.use('/api/devices', devicesRoutes);
 
 // Static: serve uploaded files
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));

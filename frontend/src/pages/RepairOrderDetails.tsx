@@ -121,9 +121,11 @@ const RepairOrderDetails: React.FC = () => {
     return { partsTotal, repairCost, grandTotal, paymentsTotal, balance };
   }, [parts, payments, repair]);
 
-  const canInvoice = useMemo(() => totals.paymentsTotal > 0, [totals]);
+  const isCancelled = (repair?.status || '').toLowerCase() === 'cancelled';
+  const canInvoice = useMemo(() => !isCancelled && totals.paymentsTotal > 0, [totals, isCancelled]);
 
   async function handleViewInvoice() {
+    if (isCancelled) return;
     try {
       const res = await api.get(`/repairs/${id}/invoice`, { responseType: 'text' });
       const w = window.open('', '_blank');
@@ -139,6 +141,7 @@ const RepairOrderDetails: React.FC = () => {
   }
 
   async function handleDownloadInvoicePDF() {
+    if (isCancelled) return;
     try {
       const res = await api.get(`/repairs/${id}/invoice`, { responseType: 'text' });
       const w = window.open('', '_blank');
@@ -157,6 +160,7 @@ const RepairOrderDetails: React.FC = () => {
 
   async function handlePayNow() {
     if (!id) return;
+    if (isCancelled) return;
     try {
       setPaying(true);
       await api.post('/payments', {
@@ -186,8 +190,8 @@ const RepairOrderDetails: React.FC = () => {
           <Link to="/repairs" className="rounded-md border border-white/10 px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm text-white hover:bg-white/5">Back to My Orders</Link>
           {canInvoice ? (
             <>
-              <button onClick={handleViewInvoice} className="rounded-md border border-white/10 px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm text-white hover:bg-white/5">View Invoice</button>
-              <button onClick={handleDownloadInvoicePDF} className="rounded-md border border-white/10 px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm text-white hover:bg-white/5">Download PDF</button>
+              <button disabled={isCancelled} onClick={handleViewInvoice} className="rounded-md border border-white/10 px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm text-white hover:bg-white/5 disabled:opacity-50">View Invoice</button>
+              <button disabled={isCancelled} onClick={handleDownloadInvoicePDF} className="rounded-md border border-white/10 px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm text-white hover:bg-white/5 disabled:opacity-50">Download PDF</button>
             </>
           ) : (
             <span className="text-xs text-slate-500">Invoice will be available after a payment is recorded.</span>
@@ -246,12 +250,12 @@ const RepairOrderDetails: React.FC = () => {
                 { label: 'Bank Transfer', value: 'bank_transfer' },
               ]}
               value={payMethod}
-              onChange={(v) => setPayMethod(v as any)}
+              onChange={(v) => !isCancelled && setPayMethod(v as any)}
               placeholder="Select method"
             />
             <button
               className="btn w-full disabled:opacity-50"
-              disabled={paying || totals.balance <= 0}
+              disabled={isCancelled || paying || totals.balance <= 0}
               onClick={handlePayNow}
             >
               {paying ? 'Processing…' : `Pay ${formatCurrency(totals.balance)}`}
@@ -263,8 +267,9 @@ const RepairOrderDetails: React.FC = () => {
       {/* Attachments (customers can upload, but cannot delete) */}
       <AttachmentsManager
         repairOrderId={repair.id}
-        canUpload={true}
+        canUpload={!isCancelled}
         canDelete={false}
+        readOnly={isCancelled}
         maxCount={3}
         maxSizeMB={5}
         accept={["image/jpeg","image/png","image/webp"]}

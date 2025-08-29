@@ -29,8 +29,16 @@ import type { Request } from 'express';
 import type { FileFilterCallback } from 'multer';
 
 const router = Router();
+// Ensure base uploads directory exists to avoid Multer errors
+try {
+  const baseDir = path.join('uploads', 'repairs');
+  if (!fs.existsSync(baseDir)) fs.mkdirSync(baseDir, { recursive: true });
+} catch (e) {
+  // Log but do not crash router initialization
+  console.warn('Failed to ensure uploads/repairs directory:', (e as any)?.message);
+}
 // Simple upload config for createRepair; stores files under uploads/repairs
-const upload = multer({ dest: 'uploads/repairs/' });
+const upload = multer({ dest: path.join('uploads', 'repairs') });
 
 // Attachments upload config: save to uploads/repairs/:id preserving extension
 const storage = multer.diskStorage({

@@ -310,7 +310,7 @@ const AdminRepairDetails: React.FC = () => {
         {payErr && <div className="text-xs text-rose-300 mb-2">{payErr}</div>}
 
         {/* Create Payment Link / Intent */}
-        <div className="rounded-md border border-white/10 bg-white/5 p-3 mb-3 grid sm:grid-cols-5 gap-2 items-end">
+        <div className={`rounded-md border border-white/10 bg-white/5 p-3 mb-3 grid sm:grid-cols-5 gap-2 items-end ${(repair.status || '').toLowerCase()==='cancelled' ? 'opacity-60 pointer-events-none' : ''}`}>
           <div>
             <label className="block text-xs text-slate-300 mb-1">Amount</label>
             <input className="w-full rounded-md bg-[#0f1218] border border-white/10 px-2 py-1.5 text-sm text-white" value={intentAmount} onChange={e=>setIntentAmount(e.target.value)} placeholder="0.00" />
@@ -341,7 +341,7 @@ const AdminRepairDetails: React.FC = () => {
             </select>
           </div>
           <div>
-            <button onClick={createIntent} className="w-full rounded-md border border-sky-400/30 bg-sky-400/10 text-sky-300 hover:bg-sky-400/20 px-3 py-2 text-sm">Create Payment Link</button>
+            <button disabled={(repair.status || '').toLowerCase()==='cancelled'} onClick={createIntent} className="w-full rounded-md border border-sky-400/30 bg-sky-400/10 text-sky-300 hover:bg-sky-400/20 px-3 py-2 text-sm disabled:opacity-50">Create Payment Link</button>
           </div>
         </div>
 
@@ -369,12 +369,12 @@ const AdminRepairDetails: React.FC = () => {
               <div className="flex gap-2">
                 {p.status === 'PENDING' && p.intentId && (
                   <>
-                    <button onClick={() => confirmIntent(p.intentId!)} className="rounded-md border border-emerald-400/30 bg-emerald-400/10 text-emerald-300 hover:bg-emerald-400/20 px-2 py-1 text-xs">Mark Paid</button>
-                    <button onClick={() => cancelIntent(p.intentId!)} className="rounded-md border border-rose-400/30 bg-rose-400/10 text-rose-300 hover:bg-rose-400/20 px-2 py-1 text-xs">Cancel</button>
+                    <button disabled={(repair.status || '').toLowerCase()==='cancelled'} onClick={() => confirmIntent(p.intentId!)} className="rounded-md border border-emerald-400/30 bg-emerald-400/10 text-emerald-300 hover:bg-emerald-400/20 px-2 py-1 text-xs disabled:opacity-50">Mark Paid</button>
+                    <button disabled={(repair.status || '').toLowerCase()==='cancelled'} onClick={() => cancelIntent(p.intentId!)} className="rounded-md border border-rose-400/30 bg-rose-400/10 text-rose-300 hover:bg-rose-400/20 px-2 py-1 text-xs disabled:opacity-50">Cancel</button>
                   </>
                 )}
                 {p.status === 'COMPLETED' && (
-                  <button onClick={() => refundPayment(p.id)} className="rounded-md border border-amber-400/30 bg-amber-400/10 text-amber-300 hover:bg-amber-400/20 px-2 py-1 text-xs">Refund</button>
+                  <button disabled={(repair.status || '').toLowerCase()==='cancelled'} onClick={() => refundPayment(p.id)} className="rounded-md border border-amber-400/30 bg-amber-400/10 text-amber-300 hover:bg-amber-400/20 px-2 py-1 text-xs disabled:opacity-50">Refund</button>
                 )}
               </div>
             </div>
@@ -431,32 +431,33 @@ const AdminRepairDetails: React.FC = () => {
         </div>
 
         <div className="rounded-lg bg-[#12151d] border border-white/10 p-4 shadow-card">
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-2">
             <p className="text-sm font-semibold text-white">Customer</p>
             {/* QA controls */}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 justify-end">
               {(me?.role === 'technician' || me?.role === 'admin') && (
-                <button onClick={openChecklist} className="rounded-md border border-white/10 bg-white/5 hover:bg-white/10 text-xs px-2 py-1">Checklist</button>
+                <button disabled={(repair.status || '').toLowerCase()==='cancelled'} onClick={openChecklist} className="rounded-md border border-white/10 bg-white/5 hover:bg-white/10 text-xs px-2 py-1 disabled:opacity-50">Checklist</button>
               )}
               {me?.role === 'admin' && (
                 <>
-                  <button onClick={toggleQaRequired} className="rounded-md border border-sky-400/30 bg-sky-400/10 text-sky-300 hover:bg-sky-400/20 text-xs px-2 py-1">
+                  <button disabled={(repair.status || '').toLowerCase()==='cancelled'} onClick={toggleQaRequired} className="rounded-md border border-sky-400/30 bg-sky-400/10 text-sky-300 hover:bg-sky-400/20 text-xs px-2 py-1 disabled:opacity-50">
                     {qaState?.qaRequired ? 'QA Required ✓' : 'Enable QA'}
                   </button>
                   <input
                     value={qaNotes}
                     onChange={e=>setQaNotes(e.target.value)}
                     placeholder="QA notes (optional)"
-                    className="rounded-md bg-[#0f1218] border border-white/10 px-2 py-1 text-xs text-white w-40"
+                    className="rounded-md bg-[#0f1218] border border-white/10 px-2 py-1 text-xs text-white min-w-0 w-full sm:w-48"
+                    disabled={(repair.status || '').toLowerCase()==='cancelled'}
                   />
                   <button
-                    disabled={!qaState?.checklistPassed}
+                    disabled={(repair.status || '').toLowerCase()==='cancelled' || !qaState?.checklistPassed}
                     onClick={() => doQaSignOff(true)}
                     className="rounded-md border border-emerald-400/30 bg-emerald-400/10 text-emerald-300 disabled:opacity-50 text-xs px-2 py-1">
                     QA Approve
                   </button>
                   <button
-                    disabled={!qaState?.qaRequired}
+                    disabled={(repair.status || '').toLowerCase()==='cancelled' || !qaState?.qaRequired}
                     onClick={() => doQaSignOff(false)}
                     className="rounded-md border border-rose-400/30 bg-rose-400/10 text-rose-300 disabled:opacity-50 text-xs px-2 py-1">
                     QA Reject
@@ -484,8 +485,9 @@ const AdminRepairDetails: React.FC = () => {
       {/* Attachments */}
       <AttachmentsManager
         repairOrderId={repair.id}
-        canUpload={true}
-        canDelete={true}
+        canUpload={(repair.status || '').toLowerCase()!=='cancelled'}
+        canDelete={(repair.status || '').toLowerCase()!=='cancelled'}
+        readOnly={(repair.status || '').toLowerCase()==='cancelled'}
         maxCount={3}
         maxSizeMB={5}
         accept={["image/jpeg","image/png","image/webp"]}
@@ -512,7 +514,7 @@ const AdminRepairDetails: React.FC = () => {
       >
         <div className="space-y-2">
           {checklistItems.map((it, idx) => (
-            <div key={it.id} className="flex items-center gap-3 rounded-md border border-white/10 bg-white/5 p-2">
+            <div key={it.id} className="flex flex-wrap items-center gap-2 sm:gap-3 rounded-md border border-white/10 bg-white/5 p-2">
               <input type="checkbox" className="accent-emerald-400" checked={it.pass} onChange={e=>{
                 const v = e.target.checked
                 setChecklistItems(prev=>prev.map((p,i)=> i===idx?{...p, pass:v}:p))
@@ -520,11 +522,11 @@ const AdminRepairDetails: React.FC = () => {
               <input value={it.label} onChange={e=>{
                 const v=e.target.value
                 setChecklistItems(prev=>prev.map((p,i)=> i===idx?{...p, label:v}:p))
-              }} className="flex-1 rounded-md bg-[#0f1218] border border-white/10 px-2 py-1 text-xs text-white" />
+              }} className="min-w-0 flex-1 rounded-md bg-[#0f1218] border border-white/10 px-2 py-1 text-xs text-white" />
               <input placeholder="notes" value={it.notes||''} onChange={e=>{
                 const v=e.target.value
                 setChecklistItems(prev=>prev.map((p,i)=> i===idx?{...p, notes:v}:p))
-              }} className="w-40 rounded-md bg-[#0f1218] border border-white/10 px-2 py-1 text-xs text-white" />
+              }} className="w-full sm:w-40 rounded-md bg-[#0f1218] border border-white/10 px-2 py-1 text-xs text-white" />
               <button onClick={()=>setChecklistItems(prev=>prev.filter((_,i)=>i!==idx))} className="text-xs rounded-md border border-rose-400/30 bg-rose-400/10 text-rose-300 px-2 py-1">Remove</button>
             </div>
           ))}
