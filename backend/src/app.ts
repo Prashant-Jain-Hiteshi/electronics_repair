@@ -12,12 +12,18 @@ import techniciansRoutes from './routes/technicians.routes';
 import locationsRoutes from './routes/locations.routes';
 import inventoryStockRoutes from './routes/inventoryStock.routes';
 import stockTransfersRoutes from './routes/stockTransfers.routes';
+import slaRoutes from './routes/sla.routes';
+import auditRoutes from './routes/audit.routes';
+import diagnosticsRoutes from './routes/diagnostics.routes';
+import worklogsRoutes from './routes/worklogs.routes';
 import path from 'path';
 import { Request, Response } from 'express';
 
 const app = express();
 
 // Middleware
+// Disable ETag to avoid 304 Not Modified for dynamic API responses
+app.set('etag', false);
 // Allow images to be requested from a different origin (e.g., Vite dev server port)
 // Helmet's default Cross-Origin-Resource-Policy is 'same-origin', which blocks cross-origin image loads
 app.use(helmet({ crossOriginResourcePolicy: false }));
@@ -27,6 +33,17 @@ app.use(
     origin: process.env.CORS_ORIGIN || '*',
   })
 );
+
+// Prevent caching for API responses to ensure fresh JSON (avoids 304 with empty body)
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Surrogate-Control', 'no-store');
+  }
+  next();
+});
 
 // Root - Hello World
 app.get('/', (_req: Request, res: Response) => {
@@ -50,9 +67,12 @@ app.use('/api/technicians', techniciansRoutes);
 app.use('/api/locations', locationsRoutes);
 app.use('/api/inventory-stock', inventoryStockRoutes);
 app.use('/api/stock-transfers', stockTransfersRoutes);
+app.use('/api/sla', slaRoutes);
+app.use('/api/audit', auditRoutes);
+app.use('/api/diagnostics', diagnosticsRoutes);
+app.use('/api/worklogs', worklogsRoutes);
 
 // Static: serve uploaded files
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 export default app;
-

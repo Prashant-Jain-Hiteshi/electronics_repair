@@ -16,6 +16,12 @@ import VendorPrice from './VendorPrice';
 import Location from './Location';
 import InventoryStock from './InventoryStock';
 import StockTransfer from './StockTransfer';
+import SlaPolicy from './SlaPolicy';
+import EscalationLog from './EscalationLog';
+import AuditLog from './AuditLog';
+import DiagnosticTemplate from './DiagnosticTemplate';
+import DiagnosticRun from './DiagnosticRun';
+import WorkLog from './WorkLog';
 
 // Associations
 // User-Customer (1:1)
@@ -93,6 +99,22 @@ Payment.belongsTo(RepairOrder, { foreignKey: 'repairOrderId', as: 'repairOrder' 
 RepairOrder.hasMany(RepairAttachment, { foreignKey: 'repairOrderId', as: 'attachments' });
 RepairAttachment.belongsTo(RepairOrder, { foreignKey: 'repairOrderId', as: 'repairOrder' });
 
+// RepairOrder - EscalationLog (1:M)
+RepairOrder.hasMany(EscalationLog, { foreignKey: 'repairOrderId', as: 'escalations' });
+EscalationLog.belongsTo(RepairOrder, { foreignKey: 'repairOrderId', as: 'repairOrder' });
+
+// RepairOrder - DiagnosticRun (1:M)
+RepairOrder.hasMany(DiagnosticRun, { foreignKey: 'repairOrderId', as: 'diagnosticRuns' });
+DiagnosticRun.belongsTo(RepairOrder, { foreignKey: 'repairOrderId', as: 'repairOrder' });
+
+// WorkLog associations
+// RepairOrder - WorkLog (1:M)
+RepairOrder.hasMany(WorkLog, { foreignKey: 'repairOrderId', as: 'workLogs' });
+WorkLog.belongsTo(RepairOrder, { foreignKey: 'repairOrderId', as: 'repairOrder' });
+// User (Technician) - WorkLog (1:M)
+User.hasMany(WorkLog, { foreignKey: 'technicianId', as: 'workLogs' });
+WorkLog.belongsTo(User, { foreignKey: 'technicianId', as: 'technician' });
+
 // Customer - Estimate (1:M)
 Customer.hasMany(Estimate, { foreignKey: 'customerId', as: 'estimates' });
 Estimate.belongsTo(Customer, { foreignKey: 'customerId', as: 'customer' });
@@ -105,4 +127,4 @@ Estimate.belongsTo(RepairOrder, { foreignKey: 'repairOrderId', as: 'repairOrder'
 RepairPart.belongsTo(Inventory, { foreignKey: 'inventoryId', as: 'Inventory' });
 RepairPart.belongsTo(RepairOrder, { foreignKey: 'repairOrderId', as: 'RepairOrder' });
 
-export { sequelize, User, Customer, RepairOrder, Inventory, Payment, RepairPart, RepairAttachment, InventoryUsage, Estimate, TechnicianProfile, TechnicianSchedule, AnalyticsRollup, TaxProfile, VendorPrice, Location, InventoryStock, StockTransfer };
+export { sequelize, User, Customer, RepairOrder, Inventory, Payment, RepairPart, RepairAttachment, InventoryUsage, Estimate, TechnicianProfile, TechnicianSchedule, AnalyticsRollup, TaxProfile, VendorPrice, Location, InventoryStock, StockTransfer, SlaPolicy, EscalationLog, AuditLog, DiagnosticTemplate, DiagnosticRun, WorkLog };

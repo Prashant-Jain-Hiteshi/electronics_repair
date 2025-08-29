@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api } from '@/api/client'
+import { activeWorkLog as apiActiveWorkLog, startWorkLog as apiStartWorkLog, stopWorkLog as apiStopWorkLog, type WorkLog } from '@/api/worklogs'
 import { useAuth } from '@/context/AuthContext'
 
 // Minimal shape for repairs we need
@@ -77,6 +78,9 @@ const TechnicianDashboard: React.FC = () => {
   const initialTab = (sp.get('tab') as 'pending'|'in_progress'|'completed') || 'pending'
   const [tab, setTab] = useState<'pending' | 'in_progress' | 'completed'>(initialTab)
   const [busyId, setBusyId] = useState<string | null>(null)
+  // worklog timers per repair
+  const [activeLogs, setActiveLogs] = useState<Record<string, WorkLog | null>>({})
+  const [elapsed, setElapsed] = useState<Record<string, number>>({})
   const hasTab = !!sp.get('tab')
 
   // Estimate form state per row
@@ -105,6 +109,78 @@ const TechnicianDashboard: React.FC = () => {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
+
+  // Load active worklogs for current list (compute IDs locally to avoid order issues)
+  useEffect(() => {
+    let mounted = true
+    async function fetchActive() {
+      try {
+        const techId = user?.id
+        const ids = repairs.filter(r => r.technicianId === techId && r.status === tab).map(r => r.id)
+        const entries: Record<string, WorkLog | null> = {}
+        await Promise.all(ids.map(async (rid) => {
+          try {
+            entries[rid] = await apiActiveWorkLog(rid)
+          } catch {
+            entries[rid] = null
+          }
+        }))
+        if (mounted) setActiveLogs(entries)
+      } catch {}
+    }
+    fetchActive()
+    return () => { mounted = false }
+  }, [repairs, user?.id, tab])
+
+  // Tick elapsed every second
+  useEffect(() => {
+    const id = setInterval(() => {
+      setElapsed(prev => {
+        const next: Record<string, number> = { ...prev }
+        Object.entries(activeLogs).forEach(([rid, log]) => {
+          if (log && log.status === 'running') {
+            const start = new Date(log.startTime).getTime()
+            next[rid] = Math.max(0, Math.floor((Date.now() - start) / 1000))
+          }
+        })
+        return next
+      })
+    }, 1000)
+    return () => clearInterval(id)
+  }, [activeLogs])
+
+  const fmtHms = (secs?: number) => {
+    const s = Math.max(0, secs || 0)
+    const h = Math.floor(s / 3600)
+    const m = Math.floor((s % 3600) / 60)
+    const ss = s % 60
+    const pad = (n: number) => n.toString().padStart(2, '0')
+    return `${pad(h)}:${pad(m)}:${pad(ss)}`
+  }
+
+  async function startTimer(repairOrderId: string) {
+    setBusyId(repairOrderId)
+    try {
+      const log = await apiStartWorkLog({ repairOrderId, taskType: 'repair' })
+      setActiveLogs(prev => ({ ...prev, [repairOrderId]: log }))
+      window.dispatchEvent(new CustomEvent('app:toast', { detail: { kind: 'success', message: 'Timer started' } }))
+    } catch (e: any) {
+      window.dispatchEvent(new CustomEvent('app:toast', { detail: { kind: 'error', message: e?.response?.data?.message || 'Failed to start timer' } }))
+    } finally { setBusyId(null) }
+  }
+
+  async function stopTimer(repairOrderId: string) {
+    const log = activeLogs[repairOrderId]
+    if (!log) return
+    setBusyId(repairOrderId)
+    try {
+      const stopped = await apiStopWorkLog(log.id)
+      setActiveLogs(prev => ({ ...prev, [repairOrderId]: stopped }))
+      window.dispatchEvent(new CustomEvent('app:toast', { detail: { kind: 'success', message: 'Timer stopped' } }))
+    } catch (e: any) {
+      window.dispatchEvent(new CustomEvent('app:toast', { detail: { kind: 'error', message: e?.response?.data?.message || 'Failed to stop timer' } }))
+    } finally { setBusyId(null) }
+  }
 
   // sync tab with URL
   useEffect(() => {
@@ -352,6 +428,16 @@ const TechnicianDashboard: React.FC = () => {
 
                     {tab === 'in_progress' && (
                       <div className="flex items-center gap-2 whitespace-nowrap">
+                        {/* Timer inline */}
+                        <div className="inline-flex items-center gap-2 rounded-md border border-white/10 px-2 py-1 bg-white/5 text-slate-200">
+                          <span className="text-xs">Time:</span>
+                          <code className="text-xs font-semibold text-white">{fmtHms(elapsed[r.id])}</code>
+                          {activeLogs[r.id]?.status === 'running' ? (
+                            <button disabled={busyId===r.id} className="btn-outline shrink-0" onClick={()=>stopTimer(r.id)}>{busyId===r.id?'...':'Stop'}</button>
+                          ) : (
+                            <button disabled={busyId===r.id} className="btn shrink-0" onClick={()=>startTimer(r.id)}>{busyId===r.id?'...':'Start'}</button>
+                          )}
+                        </div>
                         <input
                           className="input inline-block w-auto shrink-0"
                           style={{ width: 'auto' }}

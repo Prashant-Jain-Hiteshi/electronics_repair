@@ -2,7 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { body, param } from 'express-validator';
+import { body, param, oneOf } from 'express-validator';
 import { requireAuth, requireRole } from '../middleware/auth';
 import {
   listAllRepairs,
@@ -17,6 +17,10 @@ import {
   assignTechnician,
   adminOverview,
   deleteRepair,
+  getChecklist,
+  saveChecklist,
+  qaSignOff,
+  qaSetRequired,
 } from '../controllers/repairs.controller';
 import { handleValidation } from '../middleware/validate';
 import { listAttachments, uploadAttachments, deleteAttachment } from '../controllers/attachments.controller';
@@ -63,12 +67,66 @@ router.get('/mine', requireAuth, requireRole(['customer']), listMyRepairs);
 // View single repair (customer: own; technician/admin: any)
 router.get('/:id', requireAuth, requireRole(['customer', 'technician', 'admin']), getRepairById);
 // Allow creating repair orders by customers (for their own requests) and technicians/admin
-router.post('/', requireAuth, requireRole(['customer', 'technician', 'admin']), upload.array('images', 6), createRepair);
+router.post(
+  '/',
+  requireAuth,
+  requireRole(['customer', 'technician', 'admin']),
+  // Accept any file field names from the client (images, files, attachments, etc.)
+  upload.any(),
+  [
+    body('deviceType').isString().trim().notEmpty().withMessage('deviceType is required'),
+    oneOf([
+      body('brand').isString().trim().notEmpty(),
+      body('deviceBrand').isString().trim().notEmpty(),
+    ], { message: 'brand (or deviceBrand) is required' }),
+    oneOf([
+      body('model').isString().trim().notEmpty(),
+      body('deviceModel').isString().trim().notEmpty(),
+    ], { message: 'model (or deviceModel) is required' }),
+    body('issueDescription').isString().trim().notEmpty().withMessage('issueDescription is required'),
+  ],
+  handleValidation,
+  createRepair
+);
 router.put('/:id', requireAuth, requireRole(['technician', 'admin']), updateRepair);
 // Admin: delete repair order
 router.delete('/:id', requireAuth, requireRole(['admin']), deleteRepair);
 // Allow customers to cancel their own pending repairs; technicians can also cancel
 router.put('/:id/cancel', requireAuth, requireRole(['customer', 'technician', 'admin']), cancelRepair);
+
+// Checklist & QA endpoints
+router.get(
+  '/:id/checklist',
+  requireAuth,
+  requireRole(['customer', 'technician', 'admin']),
+  [param('id').isString()],
+  handleValidation,
+  getChecklist
+);
+router.post(
+  '/:id/checklist',
+  requireAuth,
+  requireRole(['technician', 'admin']),
+  [param('id').isString(), body('passed').isBoolean(), body('checklist').optional()],
+  handleValidation,
+  saveChecklist
+);
+router.post(
+  '/:id/qa/signoff',
+  requireAuth,
+  requireRole(['admin']),
+  [param('id').isString(), body('approved').isBoolean(), body('notes').optional().isString()],
+  handleValidation,
+  qaSignOff
+);
+router.put(
+  '/:id/qa/required',
+  requireAuth,
+  requireRole(['admin']),
+  [param('id').isString(), body('required').isBoolean()],
+  handleValidation,
+  qaSetRequired
+);
 
 // Admin: assign technician to a repair order
 router.put('/:id/assign', requireAuth, requireRole(['admin']), assignTechnician);
@@ -83,7 +141,8 @@ router.post(
   requireRole(['customer', 'technician', 'admin']),
   [param('id').isString()],
   handleValidation,
-  uploadAtt.array('files', 3),
+  // Accept any file field names (images, files, attachments) to avoid field-name mismatch
+  uploadAtt.any(),
   uploadAttachments
 );
 router.delete(

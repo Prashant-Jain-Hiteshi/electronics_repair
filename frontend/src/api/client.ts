@@ -1,11 +1,19 @@
 import axios, { type InternalAxiosRequestConfig } from 'axios'
 
-const baseURL = import.meta.env.VITE_API_BASE_URL as string
+let baseURL = (import.meta as any)?.env?.VITE_API_BASE_URL as string | undefined
+if (!baseURL || typeof baseURL !== 'string' || baseURL.trim() === '') {
+  baseURL = 'http://localhost:5000/api'
+  try { console.info('[api] VITE_API_BASE_URL not set. Using fallback:', baseURL) } catch {}
+} else {
+  try { console.info('[api] Base URL:', baseURL) } catch {}
+}
 
 export const api = axios.create({
   baseURL,
   headers: {
     'Content-Type': 'application/json',
+    // Prevent caching to avoid 304 Not Modified with empty bodies
+    'Cache-Control': 'no-store',
   },
 })
 
@@ -20,6 +28,24 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
       (config.headers as any) = {
         ...(config.headers || {}),
         Authorization: `Bearer ${token}`,
+      }
+    }
+  }
+  // Add anti-cache headers on GET requests to ensure fresh JSON
+  const method = (config.method || 'get').toLowerCase()
+  if (method === 'get') {
+    if (typeof config.headers?.set === 'function') {
+      config.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+      config.headers.set('Pragma', 'no-cache')
+      config.headers.set('Expires', '0')
+      config.headers.set('If-Modified-Since', '0')
+    } else {
+      (config.headers as any) = {
+        ...(config.headers || {}),
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        Pragma: 'no-cache',
+        Expires: '0',
+        'If-Modified-Since': '0',
       }
     }
   }

@@ -7,6 +7,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog'
 import Modal from '@/components/common/Modal'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { api, type ApiError } from '@/api/client'
+import { getChecklist as getQaChecklist } from '@/api/qa'
 
 export type Repair = {
   id: string
@@ -17,6 +18,8 @@ export type Repair = {
   model: string
   status: string
   priority: string
+  slaStatus?: 'on_track' | 'at_risk' | 'breached' | 'no_policy'
+  slaProgressPct?: number
 }
 
 type Technician = {
@@ -211,6 +214,19 @@ const Repairs: React.FC = () => {
     if (!val) return
     setError(null); setSuccess(null)
     try {
+      // Client-side guard: prevent marking completed if checklist/QA not satisfied
+      if (val === 'completed') {
+        const s = await getQaChecklist(repairId)
+        const checklistOk = !!s.checklistPassed
+        const qaOk = !s.qaRequired || !!s.qaApproved
+        if (!checklistOk || !qaOk) {
+          setError(!checklistOk
+            ? 'Cannot complete: technician checklist not passed.'
+            : 'Cannot complete: QA approval required and not yet approved.'
+          )
+          return
+        }
+      }
       await api.put(`/repairs/${repairId}`, { status: val })
       setSuccess('Status updated')
       await load()
@@ -349,6 +365,7 @@ const Repairs: React.FC = () => {
                 <th className="text-left py-2 px-3">ID</th>
                 <th className="text-left py-2 px-3">Device</th>
                 <th className="text-left py-2 px-3">Status</th>
+                <th className="text-left py-2 px-3">SLA</th>
                 <th className="text-left py-2 px-3">Priority</th>
                 <th className="text-left py-2 px-3">Actions</th>
               </tr>
@@ -378,6 +395,30 @@ const Repairs: React.FC = () => {
                         <IconSave />
                       </button>
                     </div>
+                  </td>
+                  <td className="py-2 px-3">
+                    {(() => {
+                      const status = r.slaStatus || 'no_policy'
+                      const pct = Math.max(0, Math.min(100, r.slaProgressPct ?? 0))
+                      const pill =
+                        status === 'breached' ? 'text-rose-300 bg-rose-400/10 border border-rose-400/20' :
+                        status === 'at_risk' ? 'text-amber-300 bg-amber-400/10 border border-amber-400/20' :
+                        status === 'on_track' ? 'text-emerald-300 bg-emerald-400/10 border border-emerald-400/20' :
+                        'text-slate-300 bg-white/5 border border-white/10'
+                      const label =
+                        status === 'breached' ? 'Breached' :
+                        status === 'at_risk' ? 'At Risk' :
+                        status === 'on_track' ? 'On Track' : 'No Policy'
+                      return (
+                        <div className="flex items-center gap-3 min-w-[180px]">
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${pill}`}>{label}</span>
+                          <div className="flex-1 h-2 bg-white/10 rounded">
+                            <div className={`h-2 rounded ${status==='breached'?'bg-rose-400':status==='at_risk'?'bg-amber-400':'bg-emerald-400'}`} style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className="text-xs text-slate-300 tabular-nums w-10 text-right">{pct}%</span>
+                        </div>
+                      )
+                    })()}
                   </td>
                   <td className="py-2 px-3">{r.priority}</td>
                   <td className="py-2 px-3 flex items-center gap-2 whitespace-nowrap relative">

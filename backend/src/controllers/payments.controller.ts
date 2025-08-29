@@ -11,6 +11,7 @@ import RepairPart from '../models/RepairPart';
 import Inventory from '../models/Inventory';
 import TaxProfile from '../models/TaxProfile';
 import Location from '../models/Location';
+import { logAudit } from '../utils/audit';
 
 // Payments for a specific repair order
 export async function listPaymentsForRepair(req: AuthRequest, res: Response) {
@@ -163,6 +164,23 @@ export async function refundPayment(req: AuthRequest, res: Response) {
       paidAt: new Date(),
       notes: notes || `Refund for payment ${original.id}`,
     } as any, { transaction: t });
+
+    // Audit log: refund created
+    await logAudit(
+      req,
+      'Payment',
+      refund.id,
+      'refund',
+      {
+        repairOrderId: original.repairOrderId,
+        originalPaymentId: original.id,
+        refundedAmount: reqAmt,
+        provider: original.provider ?? PaymentProvider.MANUAL,
+        method: original.method,
+        notes: refund.notes || null,
+      },
+      { transaction: t }
+    );
 
     await t.commit();
     return res.status(201).json({ refund });

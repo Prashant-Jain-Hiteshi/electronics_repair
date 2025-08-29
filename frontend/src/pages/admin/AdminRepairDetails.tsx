@@ -1,6 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '@/api/client'
+import AttachmentsManager from '@/components/common/AttachmentsManager'
+import Modal from '@/components/common/Modal'
+import { getChecklist as apiGetChecklist, submitChecklist, qaSignOff as apiQaSignOff, setQaRequired } from '@/api/qa'
+import { useAuth } from '@/context/AuthContext'
 
 type Repair = {
   id: string
@@ -49,11 +53,23 @@ function formatCurrency(v: any) {
 
 const AdminRepairDetails: React.FC = () => {
   const { id } = useParams()
+  const { user: me } = useAuth()
   const [repair, setRepair] = useState<Repair | null>(null)
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // QA/Checklist state
+  const [qaState, setQaState] = useState<{
+    checklist: { id: string; label: string; pass: boolean; notes?: string }[] | null
+    checklistPassed: boolean | null
+    qaRequired: boolean
+    qaApproved: boolean | null
+  } | null>(null)
+  const [checklistOpen, setChecklistOpen] = useState(false)
+  const [checklistItems, setChecklistItems] = useState<{ id: string; label: string; pass: boolean; notes?: string }[]>([])
+  const [checklistPassed, setChecklistPassed] = useState<boolean>(false)
+  const [qaNotes, setQaNotes] = useState<string>('')
   // Payments
   type Payment = {
     id: string
@@ -97,6 +113,27 @@ const AdminRepairDetails: React.FC = () => {
         setError(e?.response?.data?.message || 'Failed to load repair details')
       } finally {
         if (mounted) setLoading(false)
+      }
+    })()
+    return () => { mounted = false }
+  }, [id])
+
+  // Load QA/Checklist
+  useEffect(() => {
+    if (!id) return
+    let mounted = true
+    ;(async () => {
+      try {
+        const s = await apiGetChecklist(id)
+        if (!mounted) return
+        setQaState({
+          checklist: s.checklist,
+          checklistPassed: s.checklistPassed,
+          qaRequired: s.qaRequired,
+          qaApproved: s.qaApproved,
+        })
+      } catch {
+        // ignore
       }
     })()
     return () => { mounted = false }
@@ -186,6 +223,69 @@ const AdminRepairDetails: React.FC = () => {
     if (!repair) return '-'
     return [repair.brand, repair.model].filter(Boolean).join(' ') || repair.deviceType || '-'
   }, [repair])
+
+  function openChecklist() {
+    setChecklistItems(
+      qaState?.checklist && qaState.checklist.length
+        ? qaState.checklist
+        : [
+            { id: 'power', label: 'Device powers on', pass: false },
+            { id: 'display', label: 'Display OK', pass: false },
+            { id: 'buttons', label: 'Buttons/Inputs OK', pass: false },
+          ]
+    )
+    setChecklistPassed(Boolean(qaState?.checklistPassed))
+    setChecklistOpen(true)
+  }
+
+  async function submitChecklistForm() {
+    if (!id) return
+    try {
+      const resp = await submitChecklist(id, checklistPassed, checklistItems)
+      setQaState((prev) => ({
+        checklist: resp.checklist || null,
+        checklistPassed: resp.checklistPassed ?? null,
+        qaRequired: prev?.qaRequired ?? false,
+        qaApproved: prev?.qaApproved ?? null,
+      }))
+      setChecklistOpen(false)
+      window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'success', message: 'Checklist saved' } }))
+    } catch (e: any) {
+      window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'error', message: e?.response?.data?.message || 'Failed to save checklist' } }))
+    }
+  }
+
+  async function toggleQaRequired() {
+    if (!id) return
+    try {
+      const r = await setQaRequired(id, !(qaState?.qaRequired))
+      setQaState((prev) => ({
+        checklist: prev?.checklist || null,
+        checklistPassed: prev?.checklistPassed ?? null,
+        qaRequired: r.qaRequired,
+        qaApproved: prev?.qaApproved ?? null,
+      }))
+    } catch (e: any) {
+      window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'error', message: e?.response?.data?.message || 'Failed to update QA requirement' } }))
+    }
+  }
+
+  async function doQaSignOff(approved: boolean) {
+    if (!id) return
+    try {
+      const r = await apiQaSignOff(id, approved, qaNotes || undefined)
+      setQaState((prev) => ({
+        checklist: prev?.checklist || null,
+        checklistPassed: prev?.checklistPassed ?? null,
+        qaRequired: prev?.qaRequired ?? false,
+        qaApproved: r.qaApproved ?? null,
+      }))
+      window.dispatchEvent(new CustomEvent('toast', { detail: { type: approved ? 'success' : 'warning', message: approved ? 'QA approved' : 'QA rejected' } }))
+      setQaNotes('')
+    } catch (e: any) {
+      window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'error', message: e?.response?.data?.message || 'QA sign-off failed' } }))
+    }
+  }
 
   if (loading) return <div className="text-white">Loading...</div>
   if (error) return <div className="text-rose-400">{error}</div>
@@ -289,7 +389,22 @@ const AdminRepairDetails: React.FC = () => {
               <p className="text-xs text-slate-300">Ticket</p>
               <p className="font-semibold text-white">{repair.id.slice(0,8)}</p>
             </div>
-            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${statusColors[repair.status] || 'bg-slate-100 text-slate-700'}`}>{repair.status}</span>
+            <div className="flex items-center gap-2">
+              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${statusColors[repair.status] || 'bg-slate-100 text-slate-700'}`}>{repair.status}</span>
+              {/* QA badges */}
+              {qaState && (
+                <>
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${qaState.checklistPassed ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-400/30' : 'bg-amber-500/10 text-amber-300 border border-amber-400/30'}`}>
+                    Checklist {qaState.checklistPassed ? 'Passed' : 'Pending'}
+                  </span>
+                  {qaState.qaRequired && (
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${qaState.qaApproved ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-400/30' : 'bg-sky-500/10 text-sky-300 border border-sky-400/30'}`}>
+                      QA {qaState.qaApproved ? 'Approved' : 'Required'}
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
           </div>
           <div className="grid sm:grid-cols-2 gap-3 text-sm">
             <div>
@@ -316,7 +431,40 @@ const AdminRepairDetails: React.FC = () => {
         </div>
 
         <div className="rounded-lg bg-[#12151d] border border-white/10 p-4 shadow-card">
-          <p className="text-sm font-semibold mb-2 text-white">Customer</p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-semibold text-white">Customer</p>
+            {/* QA controls */}
+            <div className="flex items-center gap-2">
+              {(me?.role === 'technician' || me?.role === 'admin') && (
+                <button onClick={openChecklist} className="rounded-md border border-white/10 bg-white/5 hover:bg-white/10 text-xs px-2 py-1">Checklist</button>
+              )}
+              {me?.role === 'admin' && (
+                <>
+                  <button onClick={toggleQaRequired} className="rounded-md border border-sky-400/30 bg-sky-400/10 text-sky-300 hover:bg-sky-400/20 text-xs px-2 py-1">
+                    {qaState?.qaRequired ? 'QA Required ✓' : 'Enable QA'}
+                  </button>
+                  <input
+                    value={qaNotes}
+                    onChange={e=>setQaNotes(e.target.value)}
+                    placeholder="QA notes (optional)"
+                    className="rounded-md bg-[#0f1218] border border-white/10 px-2 py-1 text-xs text-white w-40"
+                  />
+                  <button
+                    disabled={!qaState?.checklistPassed}
+                    onClick={() => doQaSignOff(true)}
+                    className="rounded-md border border-emerald-400/30 bg-emerald-400/10 text-emerald-300 disabled:opacity-50 text-xs px-2 py-1">
+                    QA Approve
+                  </button>
+                  <button
+                    disabled={!qaState?.qaRequired}
+                    onClick={() => doQaSignOff(false)}
+                    className="rounded-md border border-rose-400/30 bg-rose-400/10 text-rose-300 disabled:opacity-50 text-xs px-2 py-1">
+                    QA Reject
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
           {!user ? (
             <div className="text-sm text-slate-300">No customer info</div>
           ) : (
@@ -332,6 +480,59 @@ const AdminRepairDetails: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Attachments */}
+      <AttachmentsManager
+        repairOrderId={repair.id}
+        canUpload={true}
+        canDelete={true}
+        maxCount={3}
+        maxSizeMB={5}
+        accept={["image/jpeg","image/png","image/webp"]}
+        title="Attachments"
+      />
+
+      {/* Checklist Modal */}
+      <Modal
+        open={checklistOpen}
+        onClose={() => setChecklistOpen(false)}
+        title="Technician Checklist"
+        footer={
+          <div className="flex items-center justify-between w-full">
+            <label className="flex items-center gap-2 text-xs text-slate-200">
+              <input type="checkbox" className="accent-emerald-400" checked={checklistPassed} onChange={e=>setChecklistPassed(e.target.checked)} />
+              All checks passed
+            </label>
+            <div className="flex gap-2">
+              <button onClick={()=>setChecklistOpen(false)} className="rounded-md border border-white/10 bg-white/5 hover:bg-white/10 text-xs px-3 py-1.5">Cancel</button>
+              <button onClick={submitChecklistForm} className="rounded-md border border-emerald-400/30 bg-emerald-400/10 text-emerald-300 hover:bg-emerald-400/20 text-xs px-3 py-1.5">Save</button>
+            </div>
+          </div>
+        }
+      >
+        <div className="space-y-2">
+          {checklistItems.map((it, idx) => (
+            <div key={it.id} className="flex items-center gap-3 rounded-md border border-white/10 bg-white/5 p-2">
+              <input type="checkbox" className="accent-emerald-400" checked={it.pass} onChange={e=>{
+                const v = e.target.checked
+                setChecklistItems(prev=>prev.map((p,i)=> i===idx?{...p, pass:v}:p))
+              }} />
+              <input value={it.label} onChange={e=>{
+                const v=e.target.value
+                setChecklistItems(prev=>prev.map((p,i)=> i===idx?{...p, label:v}:p))
+              }} className="flex-1 rounded-md bg-[#0f1218] border border-white/10 px-2 py-1 text-xs text-white" />
+              <input placeholder="notes" value={it.notes||''} onChange={e=>{
+                const v=e.target.value
+                setChecklistItems(prev=>prev.map((p,i)=> i===idx?{...p, notes:v}:p))
+              }} className="w-40 rounded-md bg-[#0f1218] border border-white/10 px-2 py-1 text-xs text-white" />
+              <button onClick={()=>setChecklistItems(prev=>prev.filter((_,i)=>i!==idx))} className="text-xs rounded-md border border-rose-400/30 bg-rose-400/10 text-rose-300 px-2 py-1">Remove</button>
+            </div>
+          ))}
+          <div>
+            <button onClick={()=>setChecklistItems(prev=>[...prev, { id: `item_${Date.now()}`, label: 'New check', pass: false }])} className="text-xs rounded-md border border-white/10 bg-white/5 hover:bg-white/10 px-2 py-1">Add item</button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

@@ -15,8 +15,11 @@ import Estimate from '../models/Estimate';
 import { emitToUser, emitToRole } from '../socket';
 import InventoryUsage from '../models/InventoryUsage';
 import { Op, WhereOptions, col, fn, literal, where as sqlWhere } from 'sequelize';
+import { computeSLAForRepair } from '../services/sla';
 import TechnicianProfile from '../models/TechnicianProfile';
 import TechnicianSchedule from '../models/TechnicianSchedule';
+import { logAudit } from '../utils/audit';
+import DiagnosticRun from '../models/DiagnosticRun';
 
 // Technician/Admin: list all repair orders
 export async function listAllRepairs(req: AuthRequest, res: Response) {
@@ -34,45 +37,15 @@ export async function listAllRepairs(req: AuthRequest, res: Response) {
       (where as any).priority = priority;
     }
 
-    // Build search across id, device fields, and optionally by customer full name
-    let customerIdsFromName: string[] = [];
+    // Build search across columns on repair_orders only (avoid cross-table name search for stability)
     if (q && q.trim()) {
       const s = q.trim();
-      // If searching by customer name: find Users whose first+last like q, map to Customers
-      try {
-        const users = await User.findAll({
-          where: {
-            [Op.or]: [
-              // firstName || lastName contains
-              { firstName: { [Op.iLike as any]: `%${s}%` } as any },
-              { lastName: { [Op.iLike as any]: `%${s}%` } as any },
-              // full name match (concat)
-              sqlWhere(fn('LOWER', fn('CONCAT', col('firstName'), literal("' '"), col('lastName'))), {
-                [Op.like]: `%${s.toLowerCase()}%`,
-              }) as any,
-            ],
-          } as any,
-          attributes: ['id'],
-        });
-        if (users.length) {
-          const uids = users.map((u: any) => u.id);
-          const customers = await Customer.findAll({ where: { userId: { [Op.in]: uids } as any } as any, attributes: ['id'] });
-          customerIdsFromName = customers.map((c: any) => c.id);
-        }
-      } catch (e) {
-        // ignore name search errors, fall back to other fields
-      }
-
-      // Compose OR conditions across columns we own
       (where as any)[Op.or] = [
-        { id: s }, // exact id match
+        { id: s },
         { deviceType: { [Op.iLike as any]: `%${s}%` } as any },
         { brand: { [Op.iLike as any]: `%${s}%` } as any },
         { model: { [Op.iLike as any]: `%${s}%` } as any },
       ];
-      if (customerIdsFromName.length) {
-        (where as any)[Op.or].push({ customerId: { [Op.in]: customerIdsFromName } as any });
-      }
     }
 
     const validSort = ['createdAt', 'updatedAt', 'status', 'priority'];
@@ -82,9 +55,46 @@ export async function listAllRepairs(req: AuthRequest, res: Response) {
     const ps = Math.min(100, Math.max(1, Number(pageSize) || 20));
     const offset = (p - 1) * ps;
 
-    const { rows, count } = await (RepairOrder as any).findAndCountAll({ where, order: [[sortCol, dir]] as any, limit: ps, offset });
+    const { rows, count } = await (RepairOrder as any).findAndCountAll({
+      where,
+      // Explicitly select only required columns to avoid selecting non-existent ones (e.g., 'checklist')
+      attributes: [
+        'id',
+        'customerId',
+        'technicianId',
+        'locationId',
+        'deviceType',
+        'brand',
+        'model',
+        'serialNumber',
+        'issueDescription',
+        'diagnosis',
+        'repairNotes',
+        'status',
+        'priority',
+        'estimatedCost',
+        'actualCost',
+        'estimatedCompletionDate',
+        'actualCompletionDate',
+        'warrantyPeriod',
+        'createdAt',
+        'updatedAt',
+      ],
+      order: [[sortCol, dir]] as any,
+      limit: ps,
+      offset,
+    });
+
+    // Compute SLA badges for each row
+    const repairsWithSLA = await Promise.all(
+      rows.map(async (r: any) => {
+        const sla = await computeSLAForRepair(r);
+        return { ...r.toJSON?.() || r, slaStatus: sla.status, slaProgressPct: sla.progressPct };
+      })
+    );
+
     return res.status(200).json({
-      repairs: rows,
+      repairs: repairsWithSLA,
       total: count,
       page: p,
       pageSize: ps,
@@ -94,7 +104,8 @@ export async function listAllRepairs(req: AuthRequest, res: Response) {
       filters: { status: status || null, priority: priority || null },
     });
   } catch (err) {
-    console.error('List repairs error:', err);
+    console.error('List repairs error:', (err as any)?.message || err);
+    if ((err as any)?.stack) console.error((err as any).stack);
     return res.status(500).json({ message: 'Internal server error' });
   }
 }
@@ -104,13 +115,44 @@ export async function deleteRepair(req: AuthRequest, res: Response) {
   try {
     if ((req.user as any)?.role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
     const { id } = req.params;
-    const repair = await RepairOrder.findByPk(id);
+    const repair = await RepairOrder.findByPk(id, {
+      attributes: [
+        'id',
+        'customerId',
+        'technicianId',
+        'locationId',
+        'deviceType',
+        'brand',
+        'model',
+        'serialNumber',
+        'issueDescription',
+        'diagnosis',
+        'repairNotes',
+        'status',
+        'priority',
+        'estimatedCost',
+        'actualCost',
+        'estimatedCompletionDate',
+        'actualCompletionDate',
+        'warrantyPeriod',
+        'createdAt',
+        'updatedAt',
+      ]
+    });
     if (!repair) return res.status(404).json({ message: 'Repair order not found' });
 
     // Remove linked parts
     await RepairPart.destroy({ where: { repairOrderId: id } as any });
     // Keep payments for audit trail
     await repair.destroy();
+
+    // Audit: delete repair order
+    await logAudit(req, 'RepairOrder', id, 'delete', {
+      deviceType: (repair as any).deviceType,
+      brand: (repair as any).brand,
+      model: (repair as any).model,
+      customerId: (repair as any).customerId,
+    });
     return res.status(204).send();
   } catch (err) {
     console.error('Delete repair error:', err);
@@ -124,7 +166,30 @@ export async function getRepairById(req: AuthRequest, res: Response) {
     const { id } = req.params;
     if (!req.user?.id) return res.status(401).json({ message: 'Unauthorized' });
 
-    const repair = await RepairOrder.findByPk(id);
+    const repair = await RepairOrder.findByPk(id, {
+      attributes: [
+        'id',
+        'customerId',
+        'technicianId',
+        'locationId',
+        'deviceType',
+        'brand',
+        'model',
+        'serialNumber',
+        'issueDescription',
+        'diagnosis',
+        'repairNotes',
+        'status',
+        'priority',
+        'estimatedCost',
+        'actualCost',
+        'estimatedCompletionDate',
+        'actualCompletionDate',
+        'warrantyPeriod',
+        'createdAt',
+        'updatedAt',
+      ],
+    });
     if (!repair) return res.status(404).json({ message: 'Repair order not found' });
 
     if ((req.user as any).role === 'customer') {
@@ -276,7 +341,37 @@ export async function updateRepair(req: AuthRequest, res: Response) {
     const repair = await RepairOrder.findByPk(id);
     if (!repair) return res.status(404).json({ message: 'Repair order not found' });
     const prevStatus = repair.status;
-    await repair.update(req.body);
+
+    const body = req.body || {};
+    // Enforce checklist & QA gating before allowing completion
+    try {
+      const desiredStatus = body.status as RepairStatus | undefined;
+      if (desiredStatus && desiredStatus === RepairStatus.COMPLETED) {
+        const passed = (repair as any).checklistPassed === true;
+        const qaRequired = (repair as any).qaRequired === true;
+        const qaApproved = (repair as any).qaApproved === true;
+        if (!passed) {
+          return res.status(409).json({
+            message: 'Checklist must be completed and passed before marking as completed',
+            code: 'CHECKLIST_REQUIRED',
+          });
+        }
+        if (qaRequired && !qaApproved) {
+          return res.status(409).json({
+            message: 'QA approval is required before marking as completed',
+            code: 'QA_REQUIRED',
+          });
+        }
+        // Set completion timestamp if not already
+        if (!(repair as any).actualCompletionDate) {
+          (body as any).actualCompletionDate = new Date();
+        }
+      }
+    } catch (gateErr) {
+      console.warn('Completion gating check failed:', gateErr);
+    }
+
+    await repair.update(body);
 
     // If status changed, notify the customer via Socket.IO
     try {
@@ -333,9 +428,180 @@ export async function updateRepair(req: AuthRequest, res: Response) {
       console.error('Failed to emit status change notification:', notifyErr);
     }
 
+    // Audit: if status changed
+    try {
+      const newStatus = (repair as any).status as RepairStatus;
+      if (prevStatus !== newStatus) {
+        await logAudit(req, 'RepairOrder', String((repair as any).id), 'status_change', {
+          from: prevStatus,
+          to: newStatus,
+        });
+      }
+    } catch (auditErr) {
+      console.warn('Audit log failed (status_change):', auditErr);
+    }
+
     return res.status(200).json({ repair });
   } catch (err) {
     console.error('Update repair error:', err);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+// Get checklist & QA state for a repair order
+export async function getChecklist(req: AuthRequest, res: Response) {
+  try {
+    const { id } = req.params;
+    const repair = await RepairOrder.findByPk(id);
+    if (!repair) return res.status(404).json({ message: 'Repair order not found' });
+
+    // If customer, ensure ownership
+    if ((req.user as any)?.role === 'customer') {
+      if (!req.user?.id) return res.status(401).json({ message: 'Unauthorized' });
+      const [cust] = await Customer.findOrCreate({ where: { userId: req.user.id }, defaults: { userId: req.user.id } });
+      if ((repair as any).customerId !== (cust as any).id) {
+        return res.status(403).json({ message: 'Forbidden' });
+      }
+    }
+
+    const payload = {
+      checklist: (repair as any).checklist || null,
+      checklistPassed: (repair as any).checklistPassed ?? null,
+      checklistByUserId: (repair as any).checklistByUserId || null,
+      checklistAt: (repair as any).checklistAt || null,
+      qaRequired: (repair as any).qaRequired === true,
+      qaApproved: (repair as any).qaApproved ?? null,
+      qaByUserId: (repair as any).qaByUserId || null,
+      qaAt: (repair as any).qaAt || null,
+      qaNotes: (repair as any).qaNotes || null,
+    };
+    return res.status(200).json(payload);
+  } catch (err) {
+    console.error('Get checklist error:', err);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+// Save technician checklist result
+export async function saveChecklist(req: AuthRequest, res: Response) {
+  try {
+    const { id } = req.params;
+    const { checklist, passed } = req.body || {};
+    const repair = await RepairOrder.findByPk(id);
+    if (!repair) return res.status(404).json({ message: 'Repair order not found' });
+
+    // Only technician or admin can submit checklist
+    const role = (req.user as any)?.role;
+    if (role !== 'technician' && role !== 'admin') {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+
+    (repair as any).checklist = Array.isArray(checklist) ? checklist : null;
+    (repair as any).checklistPassed = Boolean(passed);
+    (repair as any).checklistByUserId = (req.user as any)?.id || null;
+    (repair as any).checklistAt = new Date();
+
+    // Reset QA approval if checklist is changed to failed
+    if (!(repair as any).checklistPassed) {
+      (repair as any).qaApproved = null;
+      (repair as any).qaByUserId = null;
+      (repair as any).qaAt = null;
+    }
+
+    await repair.save();
+
+    try {
+      await logAudit(req, 'RepairOrder', id, 'checklist_submit', {
+        checklistCount: Array.isArray(checklist) ? checklist.length : 0,
+        passed: Boolean(passed),
+      });
+    } catch (auditErr) {
+      console.warn('Audit log failed (checklist_submit):', auditErr);
+    }
+
+    return res.status(200).json({
+      checklist: (repair as any).checklist,
+      checklistPassed: (repair as any).checklistPassed,
+      checklistByUserId: (repair as any).checklistByUserId,
+      checklistAt: (repair as any).checklistAt,
+    });
+  } catch (err) {
+    console.error('Save checklist error:', err);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+// Admin QA approval
+export async function qaSignOff(req: AuthRequest, res: Response) {
+  try {
+    const { id } = req.params;
+    const { approved, notes } = req.body || {};
+    const repair = await RepairOrder.findByPk(id);
+    if (!repair) return res.status(404).json({ message: 'Repair order not found' });
+
+    const role = (req.user as any)?.role;
+    if (role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
+
+    // Require checklist pass before QA approval
+    if (!(repair as any).checklistPassed) {
+      return res.status(409).json({ message: 'Checklist must be passed before QA sign-off', code: 'CHECKLIST_REQUIRED' });
+    }
+
+    (repair as any).qaApproved = Boolean(approved);
+    (repair as any).qaByUserId = (req.user as any)?.id || null;
+    (repair as any).qaAt = new Date();
+    (repair as any).qaNotes = typeof notes === 'string' ? notes : null;
+    await repair.save();
+
+    try {
+      await logAudit(req, 'RepairOrder', id, 'qa_signoff', {
+        approved: Boolean(approved),
+      });
+    } catch (auditErr) {
+      console.warn('Audit log failed (qa_signoff):', auditErr);
+    }
+
+    return res.status(200).json({
+      qaApproved: (repair as any).qaApproved,
+      qaByUserId: (repair as any).qaByUserId,
+      qaAt: (repair as any).qaAt,
+      qaNotes: (repair as any).qaNotes,
+    });
+  } catch (err) {
+    console.error('QA sign-off error:', err);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+// Admin: set or clear QA requirement flag
+export async function qaSetRequired(req: AuthRequest, res: Response) {
+  try {
+    const { id } = req.params;
+    const { required } = req.body || {};
+    const repair = await RepairOrder.findByPk(id);
+    if (!repair) return res.status(404).json({ message: 'Repair order not found' });
+    const role = (req.user as any)?.role;
+    if (role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
+
+    (repair as any).qaRequired = Boolean(required);
+    // If disabling QA requirement, clear pending QA state
+    if (!(repair as any).qaRequired) {
+      (repair as any).qaApproved = null;
+      (repair as any).qaByUserId = null;
+      (repair as any).qaAt = null;
+      (repair as any).qaNotes = null;
+    }
+    await repair.save();
+
+    try {
+      await logAudit(req, 'RepairOrder', id, 'qa_required_set', { required: Boolean(required) });
+    } catch (auditErr) {
+      console.warn('Audit log failed (qa_required_set):', auditErr);
+    }
+
+    return res.status(200).json({ qaRequired: (repair as any).qaRequired });
+  } catch (err) {
+    console.error('QA set required error:', err);
     return res.status(500).json({ message: 'Internal server error' });
   }
 }
@@ -421,6 +687,18 @@ export async function assignTechnician(req: AuthRequest, res: Response) {
       note: `Assignment for repair ${id}`,
     } as any);
 
+    // Audit: assignment
+    try {
+      await logAudit(req, 'RepairOrder', id, 'assign', {
+        technicianId,
+        start: startAt,
+        end: endAt,
+        capacityUnits: requestedUnits,
+      });
+    } catch (auditErr) {
+      console.warn('Audit log failed (assign):', auditErr);
+    }
+
     return res.status(200).json({ repair, assignment: sched });
   } catch (err) {
     console.error('Assign technician error:', err);
@@ -500,6 +778,25 @@ export async function addRepairPart(req: Request, res: Response) {
     if (!repair) {
       await t.rollback();
       return res.status(404).json({ message: 'Repair order not found' });
+    }
+
+    // Enforce: diagnostics must be completed before ordering parts (technician scope)
+    try {
+      const reqAny = req as any;
+      const role = reqAny?.user?.role;
+      // Allow admin bypass; enforce for technicians
+      if (role === 'technician') {
+        const completedRun = await DiagnosticRun.findOne({ where: { repairOrderId: id, status: 'completed' } as any, transaction: t });
+        if (!completedRun) {
+          await t.rollback();
+          return res.status(409).json({
+            message: 'Diagnostics must be completed before adding parts',
+            code: 'DIAGNOSTICS_REQUIRED',
+          });
+        }
+      }
+    } catch (diagCheckErr) {
+      console.warn('Diagnostics enforcement check failed:', diagCheckErr);
     }
     const inv = await Inventory.findByPk(inventoryId, { transaction: t });
     if (!inv) {
@@ -728,6 +1025,16 @@ export async function cancelRepair(req: AuthRequest, res: Response) {
       });
     } catch (techCancelNotifyErr) {
       console.error('Failed to emit technician cancellation notification:', techCancelNotifyErr);
+    }
+
+    // Audit: cancellation
+    try {
+      await logAudit(req, 'RepairOrder', id, 'cancel', {
+        previousStatus: RepairStatus.PENDING,
+        newStatus: RepairStatus.CANCELLED,
+      });
+    } catch (auditErr) {
+      console.warn('Audit log failed (cancel):', auditErr);
     }
 
     return res.status(200).json({ repair });

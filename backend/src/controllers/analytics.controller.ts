@@ -16,10 +16,9 @@ export async function revenueBreakdown(req: Request, res: Response) {
     if (from) where.paidAt = { [Op.gte]: from }
     if (to) where.paidAt = { ...(where.paidAt || {}), [Op.lte]: to }
 
-    // map to postgres date_trunc unit
     const unit = range === 'monthly' ? 'month' : range === 'weekly' ? 'week' : 'day'
-
     const bucketExpr = literal(`date_trunc('${unit}', "paidAt")`) as unknown as Sequelize | any
+
     const rows = await Payment.findAll({
       attributes: [
         [bucketExpr as any, 'bucket'],
@@ -37,6 +36,7 @@ export async function revenueBreakdown(req: Request, res: Response) {
     console.error('Revenue breakdown error:', err)
     return res.status(500).json({ message: 'Internal server error' })
   }
+
 }
 
 // GET /api/analytics/repairs?groupBy=month|technician|device
@@ -64,7 +64,6 @@ export async function repairsAggregation(req: Request, res: Response) {
         group: ['technicianId'],
         raw: true,
       })
-      // join usernames
       const techIds = rows.map((r: any) => r.technicianId)
       const techs = await User.findAll({ where: { id: { [Op.in]: techIds as any } as any, role: UserRole.TECHNICIAN as any } as any })
       const map = new Map(techs.map((t: any) => [t.id, t.name || t.email || t.id]))
@@ -99,6 +98,179 @@ export async function repairsAggregation(req: Request, res: Response) {
     return res.status(200).json({ rows })
   } catch (err) {
     console.error('Repairs aggregation error:', err)
+    return res.status(500).json({ message: 'Internal server error' })
+  }
+}
+// GET /api/analytics/turnaround-distribution?from=&to=
+// Buckets completion time (hours) for completed repairs
+export async function turnaroundDistribution(req: Request, res: Response) {
+  try {
+    const from = req.query.from ? new Date(String(req.query.from)) : null
+    const to = req.query.to ? new Date(String(req.query.to)) : null
+    const replacements: any = {}
+    let where = `WHERE r.status = 'completed' AND r."actualCompletionDate" IS NOT NULL`
+    if (from) { where += ` AND r."actualCompletionDate" >= :from`; replacements.from = from }
+    if (to) { where += ` AND r."actualCompletionDate" <= :to`; replacements.to = to }
+
+    const [rows]: any = await sequelize.query(
+      `WITH diffs AS (
+         SELECT
+           r.id,
+           EXTRACT(EPOCH FROM (r."actualCompletionDate" - r."createdAt")) / 3600.0 AS hours
+         FROM repair_orders r
+         ${where}
+       )
+       SELECT
+         SUM(CASE WHEN hours < 4 THEN 1 ELSE 0 END)                AS lt_4,
+         SUM(CASE WHEN hours >= 4  AND hours < 8 THEN 1 ELSE 0 END)  AS b4_8,
+         SUM(CASE WHEN hours >= 8  AND hours < 24 THEN 1 ELSE 0 END) AS b8_24,
+         SUM(CASE WHEN hours >= 24 AND hours < 48 THEN 1 ELSE 0 END) AS b24_48,
+         SUM(CASE WHEN hours >= 48 AND hours < 72 THEN 1 ELSE 0 END) AS b48_72,
+         SUM(CASE WHEN hours >= 72 THEN 1 ELSE 0 END)                AS gte_72,
+         COUNT(*) AS total
+       FROM diffs`,
+      { replacements }
+    )
+    const r = (rows && rows[0]) || {}
+    return res.status(200).json({
+      buckets: [
+        { label: '<4h', value: Number(r.lt_4 || 0) },
+        { label: '4-8h', value: Number(r.b4_8 || 0) },
+        { label: '8-24h', value: Number(r.b8_24 || 0) },
+        { label: '24-48h', value: Number(r.b24_48 || 0) },
+        { label: '48-72h', value: Number(r.b48_72 || 0) },
+        { label: '≥72h', value: Number(r.gte_72 || 0) },
+      ],
+      total: Number(r.total || 0),
+    })
+  } catch (err) {
+    console.error('Turnaround distribution error:', err)
+    return res.status(500).json({ message: 'Internal server error' })
+  }
+}
+
+// GET /api/analytics/first-pass-fix?from=&to=
+// Approximate FPFR as completed repairs with no part usage entries
+export async function firstPassFixRate(req: Request, res: Response) {
+  try {
+    const from = req.query.from ? new Date(String(req.query.from)) : null
+    const to = req.query.to ? new Date(String(req.query.to)) : null
+    const replacements: any = {}
+    let dateClause = ''
+    if (from) { dateClause += ' AND r."actualCompletionDate" >= :from'; replacements.from = from }
+    if (to) { dateClause += ' AND r."actualCompletionDate" <= :to'; replacements.to = to }
+
+    const [rows]: any = await sequelize.query(
+      `WITH completed AS (
+         SELECT r.id
+         FROM repair_orders r
+         WHERE r.status = 'completed' AND r."actualCompletionDate" IS NOT NULL${dateClause}
+       ),
+       usage_counts AS (
+         SELECT iu."repairOrderId" AS rid, COUNT(*) AS cnt
+         FROM inventory_usage iu
+         WHERE iu."repairOrderId" IS NOT NULL AND iu.reason = 'usage'
+         GROUP BY iu."repairOrderId"
+       )
+       SELECT 
+         (SELECT COUNT(*) FROM completed) AS total,
+         COALESCE(SUM(CASE WHEN COALESCE(u.cnt,0) = 0 THEN 1 ELSE 0 END),0) AS first_pass
+       FROM completed c
+       LEFT JOIN usage_counts u ON u.rid = c.id`,
+      { replacements }
+    )
+    const r = (rows && rows[0]) || { total: 0, first_pass: 0 }
+    const total = Number(r.total || 0)
+    const firstPass = Number(r.first_pass || 0)
+    const rate = total > 0 ? firstPass / total : 0
+    return res.status(200).json({ total, firstPass, rate })
+  } catch (err) {
+    console.error('First pass fix error:', err)
+    return res.status(500).json({ message: 'Internal server error' })
+  }
+}
+
+// GET /api/analytics/parts/costs?from=&to=&groupBy=category|device
+export async function partUsageCosts(req: Request, res: Response) {
+  try {
+    const from = req.query.from ? new Date(String(req.query.from)) : null
+    const to = req.query.to ? new Date(String(req.query.to)) : null
+    const groupBy = String((req.query.groupBy as string) || 'category')
+    const replacements: any = {}
+    let dateClause = ''
+    if (from) { dateClause += ' AND iu."createdAt" >= :from'; replacements.from = from }
+    if (to) { dateClause += ' AND iu."createdAt" <= :to'; replacements.to = to }
+
+    const groupCol = groupBy === 'device' ? 'r."deviceType"' : 'i.category'
+    const [rows]: any = await sequelize.query(
+      `SELECT ${groupCol} AS grp,
+              COALESCE(SUM(CASE WHEN iu.quantityChange < 0 THEN (-iu.quantityChange) * i."unitCost" ELSE 0 END)::decimal, 0) AS cost,
+              COALESCE(SUM(CASE WHEN iu.quantityChange < 0 THEN (-iu.quantityChange) ELSE 0 END), 0) AS units
+       FROM inventory_usage iu
+       JOIN inventory i ON i.id = iu."inventoryId"
+       LEFT JOIN repair_orders r ON r.id = iu."repairOrderId"
+       WHERE iu.reason = 'usage'${dateClause}
+       GROUP BY ${groupCol}
+       ORDER BY cost DESC`,
+      { replacements }
+    )
+    return res.status(200).json({ groupBy, rows: (rows || []).map((r: any) => ({ group: r.grp || 'Unknown', cost: Number(r.cost || 0), units: Number(r.units || 0) })) })
+  } catch (err) {
+    console.error('Part usage costs error:', err)
+    return res.status(500).json({ message: 'Internal server error' })
+  }
+}
+
+// GET /api/analytics/revenue/cohorts?months=6
+// Customer revenue cohorts by first purchase month
+export async function revenueCohorts(req: Request, res: Response) {
+  try {
+    const months = Math.max(1, Math.min(24, Number(req.query.months || 6)))
+    const [rows]: any = await sequelize.query(
+      `WITH firsts AS (
+         SELECT c.id AS customer_id, date_trunc('month', MIN(p."paidAt")) AS cohort
+         FROM customers c
+         JOIN repair_orders r ON r."customerId" = c.id
+         JOIN payments p ON p."repairOrderId" = r.id
+         GROUP BY c.id
+       ),
+       rev AS (
+         SELECT f.cohort,
+                date_trunc('month', p."paidAt") AS paid_month,
+                EXTRACT(YEAR FROM date_trunc('month', p."paidAt")) * 12 + EXTRACT(MONTH FROM date_trunc('month', p."paidAt")) -
+                (EXTRACT(YEAR FROM f.cohort) * 12 + EXTRACT(MONTH FROM f.cohort)) AS month_offset,
+                SUM(p.amount)::decimal AS revenue
+         FROM firsts f
+         JOIN repair_orders r ON r."customerId" = f.customer_id
+         JOIN payments p ON p."repairOrderId" = r.id
+         GROUP BY f.cohort, paid_month, month_offset
+       )
+       SELECT to_char(cohort, 'YYYY-MM') AS cohort,
+              month_offset,
+              COALESCE(SUM(revenue),0) AS revenue
+       FROM rev
+       WHERE month_offset >= 0 AND month_offset < :months
+       GROUP BY cohort, month_offset
+       ORDER BY cohort ASC, month_offset ASC`,
+      { replacements: { months } }
+    )
+    const byCohort = new Map<string, Array<{ monthOffset: number; revenue: number }>>()
+    for (const r of rows || []) {
+      const key = String(r.cohort)
+      const arr = byCohort.get(key) || []
+      arr.push({ monthOffset: Number(r.month_offset || 0), revenue: Number(r.revenue || 0) })
+      byCohort.set(key, arr)
+    }
+    const series = Array.from(byCohort.entries()).map(([cohort, arr]) => ({
+      cohort,
+      points: Array.from({ length: months }, (_, i) => {
+        const found = arr.find(x => x.monthOffset === i)
+        return { monthOffset: i, revenue: found ? found.revenue : 0 }
+      })
+    }))
+    return res.status(200).json({ months, series })
+  } catch (err) {
+    console.error('Revenue cohorts error:', err)
     return res.status(500).json({ message: 'Internal server error' })
   }
 }

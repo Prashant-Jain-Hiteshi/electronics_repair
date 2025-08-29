@@ -5,6 +5,7 @@ import FormInput from '@/components/common/FormInput'
 import FormSelect from '@/components/common/FormSelect'
 import Toast from '@/components/common/Toast'
 import ConfirmDialog from '@/components/common/ConfirmDialog'
+import Modal from '@/components/common/Modal'
 
 type Item = {
   id: string
@@ -40,6 +41,20 @@ const Inventory: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+
+  // Reservation modal state
+  const [reserveFor, setReserveFor] = useState<Item | null>(null)
+  const [reserveQty, setReserveQty] = useState<number>(1)
+  const [reserveRepairId, setReserveRepairId] = useState<string>('')
+  const [reserveNote, setReserveNote] = useState<string>('')
+  const [reserving, setReserving] = useState(false)
+  const [recentReservationId, setRecentReservationId] = useState<string | null>(null)
+
+  // Scan modal state
+  const [scanOpen, setScanOpen] = useState(false)
+  const [scanCode, setScanCode] = useState('')
+  const [scanLoading, setScanLoading] = useState(false)
+  const [scanFound, setScanFound] = useState<any | null>(null)
 
   // Create form
   const [form, setForm] = useState<Partial<Item>>({
@@ -100,6 +115,9 @@ const Inventory: React.FC = () => {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold tracking-tight text-white">Inventory</h1>
+        <div className="flex gap-2">
+          <button className="btn btn-sm" onClick={() => setScanOpen(true)}>Scan Barcode</button>
+        </div>
       </div>
       {error && (
         <Toast kind="error" onClose={() => setError(null)} autoHideMs={5000}>
@@ -258,30 +276,11 @@ const Inventory: React.FC = () => {
                         }
                       />
                     ) : (
-                      `₹${Number(r.sellingPrice)}`
+                      <>${Number(r.sellingPrice).toFixed(2)}</>
                     )}
                   </td>
-                  <td className="py-2 px-3 flex gap-2 flex-wrap">
-                    {!edit[r.id] ? (
-                      <>
-                        <button
-                          className="icon-btn tooltip"
-                          data-tip="Edit"
-                          aria-label="Edit item"
-                          onClick={() => setEdit({ ...edit, [r.id]: { ...r } })}
-                        >
-                          <IconEdit />
-                        </button>
-                        <button
-                          className="icon-btn tooltip"
-                          data-tip="Delete"
-                          aria-label="Delete item"
-                          onClick={() => setConfirm({ open: true, id: r.id, name: r.partName })}
-                        >
-                          <IconTrash />
-                        </button>
-                      </>
-                    ) : (
+                  <td className="py-2 px-3">
+                    {edit[r.id] ? (
                       <>
                         <button
                           className="icon-btn tooltip"
@@ -320,6 +319,29 @@ const Inventory: React.FC = () => {
                           <IconX />
                         </button>
                       </>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="icon-btn tooltip"
+                          data-tip="Edit"
+                          onClick={() => setEdit({ ...edit, [r.id]: { ...r } })}
+                        >
+                          <IconEdit />
+                        </button>
+                        <button
+                          className="btn btn-xs"
+                          onClick={() => setReserveFor(r)}
+                        >
+                          Reserve
+                        </button>
+                        <button
+                          className="icon-btn tooltip"
+                          data-tip="Delete"
+                          onClick={() => setConfirm({ open: true, id: r.id, name: r.partName })}
+                        >
+                          <IconTrash />
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -348,6 +370,144 @@ const Inventory: React.FC = () => {
           }
         }}
       />
+
+      {/* Reserve Modal */}
+      {reserveFor && (
+        <Modal
+          open
+          onClose={() => setReserveFor(null)}
+          title={`Reserve ${reserveFor.partName}`}
+          footer={(
+            <div className="flex items-center justify-end gap-2">
+              <button className="rounded-md border border-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/5" onClick={() => setReserveFor(null)}>Close</button>
+              <button
+                className="btn btn-sm"
+                disabled={reserving || !reserveRepairId || reserveQty <= 0}
+                onClick={async () => {
+                  if (!reserveFor) return
+                  setError(null); setSuccess(null); setReserving(true)
+                  try {
+                    const res = await api.post(`/inventory/${reserveFor.id}/reserve`, {
+                      repairOrderId: reserveRepairId,
+                      qty: reserveQty,
+                      note: reserveNote || undefined,
+                    })
+                    const reservation = res.data?.reservation
+                    setRecentReservationId(reservation?.id)
+                    setSuccess('Reserved successfully')
+                    await load()
+                  } catch (e: any) {
+                    const err = (e?.response?.data as ApiError) || {}
+                    setError(err.message || 'Failed to reserve')
+                  } finally {
+                    setReserving(false)
+                  }
+                }}
+              >{reserving ? 'Reserving…' : 'Reserve'}</button>
+              {recentReservationId && (
+                <button
+                  className="btn btn-sm"
+                  onClick={async () => {
+                    try {
+                      const res = await api.get(`/inventory/labels/${recentReservationId}`)
+                      const label = res.data?.label
+                      const w = window.open('', '_blank')
+                      if (w) {
+                        w.document.write(`<!doctype html><html><head><meta charset=\"utf-8\" /><title>Label</title><style>body{font-family: ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial; padding:12px} .box{border:1px solid #ccc; padding:12px; width:320px} .barcode{font-family: monospace; font-size: 14px; letter-spacing: 2px}</style></head><body><div class=\"box\"><div><strong>${label?.title || 'Reservation'}</strong></div><div>Repair ID: ${label?.repairOrderId || ''}</div><div>Part: ${label?.partName || ''}</div><div>SKU: ${label?.partNumber || ''}</div><div>Qty: ${label?.qty || ''}</div><div>Barcode:</div><div class=\"barcode\">${label?.barcode || ''}</div><div style=\"margin-top:8px; font-size:11px; color:#666\">${label?.timestamp || ''}</div></div><script>window.onload = () => setTimeout(()=>window.print(), 200)</script></body></html>`)
+                        w.document.close()
+                      }
+                    } catch (e: any) {
+                      const err = (e?.response?.data as ApiError) || {}
+                      setError(err.message || 'Failed to open label')
+                    }
+                  }}
+                >Print Label</button>
+              )}
+            </div>
+          )}
+        >
+          <div className="space-y-3">
+            <FormInput label="Repair Order ID" placeholder="e.g., 94b7c0..." value={reserveRepairId} onChange={e=>setReserveRepairId(e.currentTarget.value)} />
+            <FormInput label="Quantity" type="number" value={reserveQty as any} onChange={e=>setReserveQty(Number(e.currentTarget.value))} />
+            <FormInput label="Note (optional)" value={reserveNote} onChange={e=>setReserveNote(e.currentTarget.value)} />
+            <div className="text-xs text-slate-300">Available: {reserveFor.quantity}</div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Scan Modal */}
+      {scanOpen && (
+        <Modal
+          open
+          onClose={() => { setScanOpen(false); setScanCode(''); setScanFound(null) }}
+          title="Scan Reservation Barcode"
+          footer={(
+            <div className="flex items-center justify-end gap-2">
+              <button className="rounded-md border border-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/5" onClick={() => { setScanOpen(false); setScanCode(''); setScanFound(null) }}>Close</button>
+              {scanFound && (
+                <>
+                  <button
+                    className="btn btn-sm"
+                    onClick={async () => {
+                      try {
+                        await api.post(`/inventory/reservations/${scanFound.id}/pick`, { barcode: scanFound.barcode })
+                        setSuccess('Marked as picked')
+                      } catch (e: any) {
+                        const err = (e?.response?.data as ApiError) || {}
+                        setError(err.message || 'Failed to pick')
+                      }
+                    }}
+                  >Mark Picked</button>
+                  <button
+                    className="btn btn-sm"
+                    onClick={async () => {
+                      try {
+                        await api.post(`/inventory/reservations/${scanFound.id}/consume`)
+                        setSuccess('Marked as consumed')
+                      } catch (e: any) {
+                        const err = (e?.response?.data as ApiError) || {}
+                        setError(err.message || 'Failed to consume')
+                      }
+                    }}
+                  >Confirm Consume</button>
+                </>
+              )}
+            </div>
+          )}
+        >
+          <div className="space-y-3">
+            <FormInput
+              label="Barcode"
+              placeholder="Focus here and scan"
+              value={scanCode}
+              onChange={e=>setScanCode(e.currentTarget.value)}
+              onKeyDown={async (e: any) => {
+                if (e.key === 'Enter') {
+                  setScanLoading(true); setError(null); setScanFound(null)
+                  try {
+                    const res = await api.post('/inventory/scan', { barcode: scanCode.trim() })
+                    setScanFound(res.data?.reservation)
+                  } catch (er: any) {
+                    const err = (er?.response?.data as ApiError) || {}
+                    setError(err.message || 'Not found')
+                  } finally {
+                    setScanLoading(false)
+                  }
+                }
+              }}
+            />
+            {scanLoading && <div className="text-sm text-slate-300">Searching…</div>}
+            {scanFound && (
+              <div className="rounded-lg border border-white/10 p-3 text-sm text-white bg-white/5">
+                <div><span className="text-slate-300">Reservation:</span> {scanFound.id}</div>
+                <div><span className="text-slate-300">Repair:</span> {scanFound.repairOrderId}</div>
+                <div><span className="text-slate-300">Qty:</span> {scanFound.reservedQty || Math.abs(scanFound.quantityChange)}</div>
+                <div><span className="text-slate-300">Status:</span> {scanFound.status || 'reserved'}</div>
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }

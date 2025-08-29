@@ -36,6 +36,16 @@ interface RepairOrderAttributes {
   estimatedCompletionDate?: Date;
   actualCompletionDate?: Date;
   warrantyPeriod?: number; // days
+  // QA/Checklist fields
+  checklist?: any | null; // JSON array of { id, label, pass, notes? }
+  checklistPassed?: boolean | null;
+  checklistByUserId?: string | null;
+  checklistAt?: Date | null;
+  qaRequired?: boolean; // if true, requires admin QA approval before completion
+  qaApproved?: boolean | null;
+  qaByUserId?: string | null;
+  qaAt?: Date | null;
+  qaNotes?: string | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -65,6 +75,16 @@ class RepairOrder
   public estimatedCompletionDate?: Date | undefined;
   public actualCompletionDate?: Date | undefined;
   public warrantyPeriod?: number | undefined;
+  // QA/Checklist fields
+  public checklist?: any | null | undefined;
+  public checklistPassed?: boolean | null | undefined;
+  public checklistByUserId?: string | null | undefined;
+  public checklistAt?: Date | null | undefined;
+  public qaRequired?: boolean | undefined;
+  public qaApproved?: boolean | null | undefined;
+  public qaByUserId?: string | null | undefined;
+  public qaAt?: Date | null | undefined;
+  public qaNotes?: string | null | undefined;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -109,6 +129,16 @@ RepairOrder.init(
     estimatedCompletionDate: { type: DataTypes.DATE, allowNull: true },
     actualCompletionDate: { type: DataTypes.DATE, allowNull: true },
     warrantyPeriod: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 30 },
+    // QA/Checklist storage
+    checklist: { type: (DataTypes as any).JSONB || DataTypes.JSON, allowNull: true },
+    checklistPassed: { type: DataTypes.BOOLEAN, allowNull: true },
+    checklistByUserId: { type: DataTypes.UUID, allowNull: true, references: { model: 'users', key: 'id' } },
+    checklistAt: { type: DataTypes.DATE, allowNull: true },
+    qaRequired: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    qaApproved: { type: DataTypes.BOOLEAN, allowNull: true },
+    qaByUserId: { type: DataTypes.UUID, allowNull: true, references: { model: 'users', key: 'id' } },
+    qaAt: { type: DataTypes.DATE, allowNull: true },
+    qaNotes: { type: DataTypes.TEXT, allowNull: true },
   },
   { 
     sequelize, 

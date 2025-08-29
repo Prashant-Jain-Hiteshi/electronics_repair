@@ -23,6 +23,7 @@ import AdminEstimates from '@/pages/admin/Estimates'
 import AdminEstimateDetails from '@/pages/admin/EstimateDetails'
 import TechnicianDashboard from '@/pages/technician/Dashboard'
 import TechnicianShell from '@/components/technician/TechnicianShell'
+import RepairWizard from '@/pages/technician/RepairWizard'
 
 // Small inline icons for sidebar
 const IconDashboard = () => (
@@ -625,6 +626,16 @@ const App: React.FC = () => {
           <TechnicianProtectedRoute>
             <TechnicianShell>
               <TechnicianDashboard />
+            </TechnicianShell>
+          </TechnicianProtectedRoute>
+        }
+      />
+      <Route
+        path="/technician/repairs/:id"
+        element={
+          <TechnicianProtectedRoute>
+            <TechnicianShell>
+              <RepairWizard />
             </TechnicianShell>
           </TechnicianProtectedRoute>
         }

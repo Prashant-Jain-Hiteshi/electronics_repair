@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { api } from '@/api/client';
 import { useAuth } from '@/context/AuthContext';
 import ThemedSelect from '@/components/common/ThemedSelect';
+import AttachmentsManager from '@/components/common/AttachmentsManager';
 
 type Repair = {
   id: string;
@@ -259,7 +260,16 @@ const RepairOrderDetails: React.FC = () => {
         </div>
       </div>
 
-      
+      {/* Attachments (customers can upload, but cannot delete) */}
+      <AttachmentsManager
+        repairOrderId={repair.id}
+        canUpload={true}
+        canDelete={false}
+        maxCount={3}
+        maxSizeMB={5}
+        accept={["image/jpeg","image/png","image/webp"]}
+        title="Attachments"
+      />
 
       <div className="rounded-lg border border-white/10 p-4 shadow-card">
         <div className="flex items-center justify-between mb-2">
