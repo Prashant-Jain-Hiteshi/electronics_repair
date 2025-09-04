@@ -26,6 +26,7 @@ export default function RepairWizard() {
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [repairStatus, setRepairStatus] = useState<string | null>(null)
+  const isNew = (repairId || '').toLowerCase() === 'new'
 
   const currentIndex = run?.progress?.currentIndex ?? 0
   const currentStep: any = useMemo(() => {
@@ -37,6 +38,14 @@ export default function RepairWizard() {
     if (!repairId) return
     let mounted = true
     async function boot() {
+      if (isNew) {
+        setRun(null)
+        setTemplates([])
+        setRepairStatus(null)
+        setError(null)
+        setLoading(false)
+        return
+      }
       setLoading(true)
       setError(null)
       try {
@@ -61,10 +70,10 @@ export default function RepairWizard() {
     }
     boot()
     return () => { mounted = false }
-  }, [repairId])
+  }, [repairId, isNew])
 
   async function handleStart(templateId?: string) {
-    if (!repairId) return
+    if (!repairId || isNew) return
     setSaving(true)
     try {
       const r = await startRun(repairId, templateId ? { templateId } : undefined)
@@ -113,6 +122,23 @@ export default function RepairWizard() {
   }
 
   if (!repairId) return <Navigate to="/technician" replace />
+  if (isNew) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm text-slate-500"><Link to="/technician" className="hover:underline">Technician</Link> / <span className="text-slate-700">Repair</span></div>
+            <h1 className="text-xl font-semibold text-slate-800">Guided Diagnostics</h1>
+          </div>
+          <div className="text-sm text-slate-600">Repair ID: <code>new</code></div>
+        </div>
+        <div className="rounded-xl border bg-white p-4 text-sm text-slate-600">
+          You're creating a new repair order. Diagnostics will be available after the repair is saved.
+        </div>
+        <Link to="/technician" className="inline-block rounded-md border px-3 py-1.5 text-sm hover:bg-slate-50">Back to Dashboard</Link>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">

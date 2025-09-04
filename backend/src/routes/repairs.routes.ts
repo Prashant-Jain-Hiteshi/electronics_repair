@@ -73,7 +73,14 @@ router.get('/overview', requireAuth, requireRole(['admin']), adminOverview);
 // Customers: view their own repair orders
 router.get('/mine', requireAuth, requireRole(['customer']), listMyRepairs);
 // View single repair (customer: own; technician/admin: any)
-router.get('/:id', requireAuth, requireRole(['customer', 'technician', 'admin']), getRepairById);
+router.get(
+  '/:id',
+  requireAuth,
+  requireRole(['customer', 'technician', 'admin']),
+  [param('id').isUUID()],
+  handleValidation,
+  getRepairById
+);
 // Allow creating repair orders by customers (for their own requests) and technicians/admin
 router.post(
   '/',
@@ -96,18 +103,39 @@ router.post(
   handleValidation,
   createRepair
 );
-router.put('/:id', requireAuth, requireRole(['technician', 'admin']), updateRepair);
+router.put(
+  '/:id',
+  requireAuth,
+  requireRole(['technician', 'admin']),
+  [param('id').isUUID()],
+  handleValidation,
+  updateRepair
+);
 // Admin: delete repair order
-router.delete('/:id', requireAuth, requireRole(['admin']), deleteRepair);
+router.delete(
+  '/:id',
+  requireAuth,
+  requireRole(['admin']),
+  [param('id').isUUID()],
+  handleValidation,
+  deleteRepair
+);
 // Allow customers to cancel their own pending repairs; technicians can also cancel
-router.put('/:id/cancel', requireAuth, requireRole(['customer', 'technician', 'admin']), cancelRepair);
+router.put(
+  '/:id/cancel',
+  requireAuth,
+  requireRole(['customer', 'technician', 'admin']),
+  [param('id').isUUID()],
+  handleValidation,
+  cancelRepair
+);
 
 // Checklist & QA endpoints
 router.get(
   '/:id/checklist',
   requireAuth,
   requireRole(['customer', 'technician', 'admin']),
-  [param('id').isString()],
+  [param('id').isUUID()],
   handleValidation,
   getChecklist
 );
@@ -115,7 +143,7 @@ router.post(
   '/:id/checklist',
   requireAuth,
   requireRole(['technician', 'admin']),
-  [param('id').isString(), body('passed').isBoolean(), body('checklist').optional()],
+  [param('id').isUUID(), body('passed').isBoolean(), body('checklist').optional()],
   handleValidation,
   saveChecklist
 );
@@ -123,7 +151,7 @@ router.post(
   '/:id/qa/signoff',
   requireAuth,
   requireRole(['admin']),
-  [param('id').isString(), body('approved').isBoolean(), body('notes').optional().isString()],
+  [param('id').isUUID(), body('approved').isBoolean(), body('notes').optional().isString()],
   handleValidation,
   qaSignOff
 );
@@ -131,23 +159,44 @@ router.put(
   '/:id/qa/required',
   requireAuth,
   requireRole(['admin']),
-  [param('id').isString(), body('required').isBoolean()],
+  [param('id').isUUID(), body('required').isBoolean()],
   handleValidation,
   qaSetRequired
 );
 
 // Admin: assign technician to a repair order
-router.put('/:id/assign', requireAuth, requireRole(['admin']), assignTechnician);
+router.put(
+  '/:id/assign',
+  requireAuth,
+  requireRole(['admin']),
+  [param('id').isUUID()],
+  handleValidation,
+  assignTechnician
+);
 // POST alias for assignment (for create semantics)
-router.post('/:id/assign', requireAuth, requireRole(['admin']), assignTechnician);
+router.post(
+  '/:id/assign',
+  requireAuth,
+  requireRole(['admin']),
+  [param('id').isUUID()],
+  handleValidation,
+  assignTechnician
+);
 
 // Attachments: list, upload (1-3), delete
-router.get('/:id/attachments', requireAuth, requireRole(['customer', 'technician', 'admin']), [param('id').isString()], handleValidation, listAttachments);
+router.get(
+  '/:id/attachments',
+  requireAuth,
+  requireRole(['customer', 'technician', 'admin']),
+  [param('id').isUUID()],
+  handleValidation,
+  listAttachments
+);
 router.post(
   '/:id/attachments',
   requireAuth,
   requireRole(['customer', 'technician', 'admin']),
-  [param('id').isString()],
+  [param('id').isUUID()],
   handleValidation,
   // Accept any file field names (images, files, attachments) to avoid field-name mismatch
   uploadAtt.any(),
@@ -157,7 +206,7 @@ router.delete(
   '/:id/attachments/:attachmentId',
   requireAuth,
   requireRole(['customer', 'technician', 'admin']),
-  [param('id').isString(), param('attachmentId').isString()],
+  [param('id').isUUID(), param('attachmentId').isString()],
   handleValidation,
   deleteAttachment
 );
@@ -167,7 +216,7 @@ router.get(
   '/:id/parts',
   requireAuth,
   requireRole(['admin', 'technician', 'customer']),
-  [param('id').isString()],
+  [param('id').isUUID()],
   handleValidation,
   listRepairParts
 );
@@ -176,7 +225,7 @@ router.post(
   requireAuth,
   requireRole(['admin', 'technician']),
   [
-    param('id').isString(),
+    param('id').isUUID(),
     body('inventoryId').isString(),
     body('quantity').isInt({ gt: 0 }),
     body('unitPrice').optional().isFloat({ gt: 0 }),
@@ -188,7 +237,7 @@ router.delete(
   '/:id/parts/:repairPartId',
   requireAuth,
   requireRole(['admin', 'technician']),
-  [param('id').isString(), param('repairPartId').isString()],
+  [param('id').isUUID(), param('repairPartId').isString()],
   handleValidation,
   removeRepairPart
 );
@@ -198,7 +247,7 @@ router.get(
   '/:id/invoice',
   requireAuth,
   requireRole(['admin', 'technician', 'customer']),
-  [param('id').isString()],
+  [param('id').isUUID()],
   handleValidation,
   getRepairInvoice
 );

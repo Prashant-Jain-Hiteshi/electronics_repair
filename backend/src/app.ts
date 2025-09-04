@@ -24,7 +24,7 @@ import feedbackRoutes from './routes/feedback.routes';
 import devicesRoutes from './routes/devices.routes';
 import usersRoutes from './routes/users.routes';
 import path from 'path';
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 
 const app = express();
 
@@ -88,5 +88,58 @@ app.use('/api/devices', devicesRoutes);
 
 // Static: serve uploaded files
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+
+// 404 handler for unknown routes
+app.use((req: Request, res: Response) => {
+  if (req.path.startsWith('/api')) {
+    return res.status(404).json({
+      error: {
+        code: 'NOT_FOUND',
+        message: `Endpoint not found: ${req.method} ${req.originalUrl}`,
+      },
+    });
+  }
+  return res.status(404).send('Not Found');
+});
+
+// Centralized error handler
+// Ensure this stays after all routes/middleware
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
+  const status = typeof err?.status === 'number' ? err.status : 500;
+  const isApi = req.path.startsWith('/api');
+
+  // Basic structured log
+  const logPayload = {
+    level: status >= 500 ? 'error' : 'warn',
+    ts: new Date().toISOString(),
+    method: req.method,
+    path: req.originalUrl,
+    status,
+    message: err?.message || 'Unhandled error',
+    stack: process.env.NODE_ENV === 'production' ? undefined : err?.stack,
+  } as const;
+  try {
+    const line = `[${logPayload.level}] ${logPayload.ts} ${logPayload.method} ${logPayload.path} -> ${logPayload.status} :: ${logPayload.message}`;
+    if (logPayload.level === 'error') console.error(line, logPayload.stack || '');
+    else console.warn(line, logPayload.stack || '');
+  } catch {}
+
+  const payload = {
+    error: {
+      code: err?.code || (status >= 500 ? 'INTERNAL_ERROR' : 'REQUEST_ERROR'),
+      message:
+        typeof err?.publicMessage === 'string'
+          ? err.publicMessage
+          : status >= 500
+          ? 'Something went wrong. Please try again later.'
+          : err?.message || 'Request error',
+      details: process.env.NODE_ENV === 'production' ? undefined : err?.details || undefined,
+    },
+  };
+
+  if (isApi) return res.status(status).json(payload);
+  return res.status(status).type('text/plain').send(payload.error.message);
+});
 
 export default app;

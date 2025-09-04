@@ -173,7 +173,7 @@ const Login: React.FC = () => {
           </div>
         )}
 
-        <button className="btn w-full" disabled={loading}>
+        <button className="btn btn-primary w-full" disabled={loading}>
           {loading ? (step==='mobile' ? 'Sending OTP…' : 'Verifying…') : (step==='mobile' ? 'Send OTP' : 'Verify & Continue')}
         </button>
 

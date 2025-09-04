@@ -1,0 +1,7 @@
+/* Import Toastify styles manually */
+@import 'react-toastify/dist/ReactToastify.min.css';
+
+/* Additional toast overrides if needed */
+.Toastify__toast-container {
+  z-index: 9999;
+}

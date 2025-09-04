@@ -137,11 +137,11 @@ const CustomerProfile: React.FC = () => {
       <form onSubmit={onSave} className="space-y-6 max-w-3xl">
         <div>
           <label className="block text-sm mb-1">First Name</label>
-          <input value={firstName} onChange={e=>setFirstName(e.target.value)} className="w-full rounded-md border px-3 py-2" placeholder="John" disabled={!editMode} />
+          <input value={firstName} onChange={e=>setFirstName(e.target.value)} className="w-full rounded-md border px-3 py-2" placeholder="First name" disabled={!editMode} />
         </div>
         <div>
           <label className="block text-sm mb-1">Last Name</label>
-          <input value={lastName} onChange={e=>setLastName(e.target.value)} className="w-full rounded-md border px-3 py-2" placeholder="Doe" disabled={!editMode} />
+          <input value={lastName} onChange={e=>setLastName(e.target.value)} className="w-full rounded-md border px-3 py-2" placeholder="Last name" disabled={!editMode} />
         </div>
         <div>
           <label className="block text-sm mb-1">Phone</label>

@@ -19,7 +19,6 @@ const AuthLayout: React.FC<AuthLayoutProps> = ({ title, subtitle, children, righ
           <div className="absolute inset-0 bg-[linear-gradient(180deg,#0b0d12_0%,#0f1218_100%)]" />
           {/* Soft blobs */}
           <span className="pointer-events-none absolute -top-12 -left-12 h-40 w-40 rounded-full bg-[#A48AFB]/10 blur-2xl anim-float-slow" />
-          <span className="pointer-events-none absolute bottom-0 right-0 h-44 w-44 rounded-full bg-[#A48AFB]/10 blur-2xl anim-float-rev" />
           <span className="pointer-events-none absolute top-1/3 left-1/3 -translate-x-1/2 -translate-y-1/2 h-56 w-56 rounded-full bg-[#A48AFB]/5 blur-3xl anim-pulse-glow" />
           {/* Floating chips (subtle) */}
           <div className="pointer-events-none absolute top-4 left-4 anim-drift-1">
@@ -59,7 +58,6 @@ const AuthLayout: React.FC<AuthLayoutProps> = ({ title, subtitle, children, righ
 
         {/* Animated gradient blobs */}
         <span className="pointer-events-none absolute -top-10 -left-10 h-48 w-48 rounded-full bg-[#A48AFB]/15 blur-2xl anim-float-slow" />
-        <span className="pointer-events-none absolute bottom-10 -right-10 h-56 w-56 rounded-full bg-[#A48AFB]/10 blur-2xl anim-float-rev" />
         <span className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-72 w-72 rounded-full bg-white/5 blur-3xl anim-pulse-glow" />
 
         {/* Floating chips */}

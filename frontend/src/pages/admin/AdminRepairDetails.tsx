@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+  import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '@/api/client'
 import AttachmentsManager from '@/components/common/AttachmentsManager'
@@ -54,6 +54,8 @@ function formatCurrency(v: any) {
 const AdminRepairDetails: React.FC = () => {
   const { id } = useParams()
   const { user: me } = useAuth()
+  const isNew = (id || '').toLowerCase() === 'new'
+
   const [repair, setRepair] = useState<Repair | null>(null)
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [user, setUser] = useState<User | null>(null)
@@ -100,6 +102,14 @@ const AdminRepairDetails: React.FC = () => {
   useEffect(() => {
     let mounted = true
     ;(async () => {
+      if (!id || isNew) {
+        setLoading(false)
+        setError(null)
+        setRepair(null)
+        setCustomer(null)
+        setUser(null)
+        return
+      }
       try {
         setLoading(true)
         const res = await api.get(`/repairs/${id}`)
@@ -116,11 +126,11 @@ const AdminRepairDetails: React.FC = () => {
       }
     })()
     return () => { mounted = false }
-  }, [id])
+  }, [id, isNew])
 
   // Load QA/Checklist
   useEffect(() => {
-    if (!id) return
+    if (!id || isNew) return
     let mounted = true
     ;(async () => {
       try {
@@ -141,7 +151,7 @@ const AdminRepairDetails: React.FC = () => {
 
   // Load payments for this repair
   useEffect(() => {
-    if (!id) return
+    if (!id || isNew) return
     let mounted = true
     ;(async () => {
       try {
@@ -158,10 +168,10 @@ const AdminRepairDetails: React.FC = () => {
       }
     })()
     return () => { mounted = false }
-  }, [id])
+  }, [id, isNew])
 
   async function refreshPayments() {
-    if (!id) return
+    if (!id || isNew) return
     try {
       const res = await api.get(`/payments/repair/${id}`)
       setPayments(res.data?.payments || [])
@@ -169,7 +179,7 @@ const AdminRepairDetails: React.FC = () => {
   }
 
   async function createIntent() {
-    if (!id) return
+    if (!id || isNew) return
     const amt = Number(intentAmount)
     if (!Number.isFinite(amt) || amt <= 0) { setPayErr('Enter a valid amount'); return }
     setPayErr(null)
@@ -239,7 +249,7 @@ const AdminRepairDetails: React.FC = () => {
   }
 
   async function submitChecklistForm() {
-    if (!id) return
+    if (!id || isNew) return
     try {
       const resp = await submitChecklist(id, checklistPassed, checklistItems)
       setQaState((prev) => ({
@@ -256,7 +266,7 @@ const AdminRepairDetails: React.FC = () => {
   }
 
   async function toggleQaRequired() {
-    if (!id) return
+    if (!id || isNew) return
     try {
       const r = await setQaRequired(id, !(qaState?.qaRequired))
       setQaState((prev) => ({
@@ -271,7 +281,7 @@ const AdminRepairDetails: React.FC = () => {
   }
 
   async function doQaSignOff(approved: boolean) {
-    if (!id) return
+    if (!id || isNew) return
     try {
       const r = await apiQaSignOff(id, approved, qaNotes || undefined)
       setQaState((prev) => ({
@@ -288,6 +298,13 @@ const AdminRepairDetails: React.FC = () => {
   }
 
   if (loading) return <div className="text-white">Loading...</div>
+  if (isNew) return (
+    <div className="space-y-3 text-white">
+      <h1 className="text-xl font-semibold">New Repair (Admin)</h1>
+      <p className="text-slate-300 text-sm">You're creating a new repair order. Admin details will appear after it is saved.</p>
+      <Link to="/admin/repairs" className="rounded-md border border-white/10 px-3 py-2 text-sm bg-white/5 hover:bg-white/10">Back</Link>
+    </div>
+  )
   if (error) return <div className="text-rose-400">{error}</div>
   if (!repair) return <div className="text-white">Not found</div>
 

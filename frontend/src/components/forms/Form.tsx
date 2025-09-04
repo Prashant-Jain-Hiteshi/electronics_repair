@@ -83,21 +83,20 @@ function Form<TFieldValues extends FieldValues>({
     <FormProvider {...methods}>
       <form
         onSubmit={handleSubmit(onSubmit)}
-        className={className}
+        className={`space-y-4 ${className}`}
         noValidate
         {...props}
       >
-        {/* Global form error message */}
+        {/* Error message */}
         {error && (
-          <div className="mb-4 rounded-md bg-red-50 p-4">
-            <div className="flex">
+          <div className="p-4 text-sm text-red-700 bg-red-100 rounded-lg dark:bg-red-900/30 dark:text-red-400" role="alert">
+            <div className="flex items-center">
               <div className="flex-shrink-0">
                 <svg
-                  className="h-5 w-5 text-red-400"
+                  className="h-5 w-5 text-red-500"
                   xmlns="http://www.w3.org/2000/svg"
                   viewBox="0 0 20 20"
                   fill="currentColor"
-                  aria-hidden="true"
                 >
                   <path
                     fillRule="evenodd"
@@ -107,7 +106,7 @@ function Form<TFieldValues extends FieldValues>({
                 </svg>
               </div>
               <div className="ml-3">
-                <h3 className="text-sm font-medium text-red-800">{error}</h3>
+                <p className="font-medium">{error}</p>
               </div>
             </div>
           </div>
@@ -115,15 +114,14 @@ function Form<TFieldValues extends FieldValues>({
 
         {/* Success message */}
         {isSuccess && successMessage && (
-          <div className="mb-4 rounded-md bg-green-50 p-4">
-            <div className="flex">
+          <div className="p-4 text-sm text-green-700 bg-green-100 rounded-lg dark:bg-green-900/30 dark:text-green-400">
+            <div className="flex items-center">
               <div className="flex-shrink-0">
                 <svg
-                  className="h-5 w-5 text-green-400"
+                  className="h-5 w-5 text-green-500"
                   xmlns="http://www.w3.org/2000/svg"
                   viewBox="0 0 20 20"
                   fill="currentColor"
-                  aria-hidden="true"
                 >
                   <path
                     fillRule="evenodd"
@@ -133,7 +131,7 @@ function Form<TFieldValues extends FieldValues>({
                 </svg>
               </div>
               <div className="ml-3">
-                <p className="text-sm font-medium text-green-800">{successMessage}</p>
+                <p className="font-medium">{successMessage}</p>
               </div>
             </div>
           </div>

@@ -72,12 +72,21 @@ const RepairOrderDetails: React.FC = () => {
   const [paying, setPaying] = useState(false);
   const [payMethod, setPayMethod] = useState<'upi' | 'card' | 'cash' | 'bank_transfer'>('upi');
   
-
-  
+  // Route guard: do not call APIs if id is the special "new" placeholder
+  const isNew = (id || '').toLowerCase() === 'new';
 
   useEffect(() => {
     let mounted = true;
     (async () => {
+      if (!id || isNew) {
+        // Skip network calls for placeholder route
+        setRepair(null);
+        setParts([]);
+        setPayments([]);
+        setError(null);
+        setLoading(false);
+        return;
+      }
       try {
         setLoading(true);
         const [r, p, pay] = await Promise.all([
@@ -99,7 +108,7 @@ const RepairOrderDetails: React.FC = () => {
     return () => {
       mounted = false;
     };
-  }, [id]);
+  }, [id, isNew]);
 
   
 
@@ -125,7 +134,7 @@ const RepairOrderDetails: React.FC = () => {
   const canInvoice = useMemo(() => !isCancelled && totals.paymentsTotal > 0, [totals, isCancelled]);
 
   async function handleViewInvoice() {
-    if (isCancelled) return;
+    if (isCancelled || isNew) return;
     try {
       const res = await api.get(`/repairs/${id}/invoice`, { responseType: 'text' });
       const w = window.open('', '_blank');
@@ -141,7 +150,7 @@ const RepairOrderDetails: React.FC = () => {
   }
 
   async function handleDownloadInvoicePDF() {
-    if (isCancelled) return;
+    if (isCancelled || isNew) return;
     try {
       const res = await api.get(`/repairs/${id}/invoice`, { responseType: 'text' });
       const w = window.open('', '_blank');
@@ -159,7 +168,7 @@ const RepairOrderDetails: React.FC = () => {
   }
 
   async function handlePayNow() {
-    if (!id) return;
+    if (!id || isNew) return;
     if (isCancelled) return;
     try {
       setPaying(true);
@@ -179,6 +188,18 @@ const RepairOrderDetails: React.FC = () => {
   }
 
   if (loading) return <div className="p-4 sm:p-6">Loading...</div>;
+  if (isNew) {
+    return (
+      <div className="p-4 sm:p-6 space-y-2">
+        <h1 className="text-lg sm:text-2xl font-semibold">New Repair</h1>
+        <p className="text-sm text-slate-500">You're creating a new repair order. Details will appear here after it is saved.</p>
+        <div className="flex flex-wrap gap-2">
+          <Link to="/create-repair" className="inline-block rounded-md bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-700">Create Repair</Link>
+          <Link to="/repairs" className="inline-block rounded-md border border-white/10 px-3 py-2 text-sm text-white hover:bg-white/5">Back to My Orders</Link>
+        </div>
+      </div>
+    );
+  }
   if (error) return <div className="p-4 sm:p-6 text-rose-700">{error}</div>;
   if (!repair) return <div className="p-4 sm:p-6">Not found</div>;
 

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { body } from 'express-validator';
+import { body, param } from 'express-validator';
 import { requireAuth, requireRole } from '../middleware/auth';
 import {
   listAllPayments,
@@ -27,7 +27,14 @@ router.get('/mine', requireAuth, requireRole(['customer']), listMyPayments);
 router.get('/technician', requireAuth, requireRole(['technician']), listTechnicianPayments);
 
 // Payments for a specific repair order (customer: own; technician/admin: any)
-router.get('/repair/:id', requireAuth, requireRole(['customer', 'technician', 'admin']), listPaymentsForRepair);
+router.get(
+  '/repair/:id',
+  requireAuth,
+  requireRole(['customer', 'technician', 'admin']),
+  [param('id').isUUID()],
+  handleValidation,
+  listPaymentsForRepair
+);
 
 // Admin/Technician: create a payment
 router.post(
@@ -35,7 +42,7 @@ router.post(
   requireAuth,
   requireRole(['admin', 'technician', 'customer']),
   [
-    body('repairOrderId').isString().withMessage('repairOrderId is required'),
+    body('repairOrderId').isUUID().withMessage('repairOrderId must be a valid UUID'),
     body('amount').isFloat({ gt: 0 }).withMessage('amount must be > 0'),
     body('method').isIn(['cash', 'card', 'upi', 'bank_transfer']).withMessage('invalid method'),
     body('transactionId').optional().isString(),
@@ -52,7 +59,7 @@ router.post(
   requireAuth,
   requireRole(['admin', 'technician', 'customer']),
   [
-    body('repairOrderId').isString(),
+    body('repairOrderId').isUUID(),
     body('amount').isFloat({ gt: 0 }),
     body('method').isIn(['cash', 'card', 'upi', 'bank_transfer']),
     body('provider').optional().isIn(['manual', 'stripe', 'upi']),
@@ -96,6 +103,8 @@ router.get(
   '/invoice/repair/:id',
   requireAuth,
   requireRole(['admin', 'technician', 'customer']),
+  [param('id').isUUID()],
+  handleValidation,
   getInvoiceForRepair
 );
 

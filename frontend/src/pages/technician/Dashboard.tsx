@@ -22,11 +22,11 @@ interface RepairOrderLite {
 }
 
 const statusBadge: Record<string, string> = {
-  pending: 'bg-amber-100 text-amber-800',
-  in_progress: 'bg-blue-100 text-blue-800',
-  completed: 'bg-emerald-100 text-emerald-800',
-  delivered: 'bg-teal-100 text-teal-800',
-  cancelled: 'bg-rose-100 text-rose-800',
+  pending: 'bg-amber-500/20 text-amber-300',
+  in_progress: 'bg-blue-500/20 text-blue-300',
+  completed: 'bg-emerald-500/20 text-emerald-300',
+  delivered: 'bg-teal-500/20 text-teal-300',
+  cancelled: 'bg-rose-500/20 text-rose-300',
 }
 
 const fmtInr = (n?: number | string | null) => {
@@ -71,6 +71,7 @@ const IconGrid = () => (
 
 const TechnicianDashboard: React.FC = () => {
   const { user } = useAuth()
+  const displayName = (user as any)?.displayName || [user?.firstName, user?.lastName].filter(Boolean).join(' ') || (user as any)?.name || (user as any)?.email || 'Technician'
   const [repairs, setRepairs] = useState<RepairOrderLite[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -310,16 +311,16 @@ const TechnicianDashboard: React.FC = () => {
       {!hasTab && (
         <>
           {/* Hero to mirror admin */}
-          <section className="relative overflow-hidden rounded-xl border border-white/10 bg-[linear-gradient(180deg,#0b0d12_0%,#0f1218_100%)] p-6">
-            <span className="pointer-events-none absolute -top-6 -left-6 h-20 w-20 rounded-full bg-[#A48AFB]/20 blur-xl anim-float-slow" />
-            <span className="pointer-events-none absolute -bottom-8 -right-8 h-24 w-24 rounded-full bg-[#A48AFB]/15 blur-xl anim-float-rev" />
+          <section className="relative overflow-hidden rounded-xl border dark:border-white/10 bg-[#0b0d12] dark:bg-[linear-gradient(180deg,#0b0d12_0%,#0f1218_100%)] p-6">
+            <span className="pointer-events-none absolute -top-6 -left-6 h-20 w-20 rounded-full bg-[#A48AFB]/20 blur-xl anim-float-slow hidden dark:block" />
+            <span className="pointer-events-none absolute -bottom-8 -right-8 h-24 w-24 rounded-full bg-[#A48AFB]/15 blur-xl anim-float-rev hidden dark:block" />
             <div className="relative">
               <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">Technician Dashboard</h1>
-              <p className="mt-1 text-slate-300">Welcome {user?.firstName} {user?.lastName}. Monitor and manage your assigned repair jobs.</p>
+              <p className="mt-1 text-slate-300">Welcome {displayName}. Monitor and manage your assigned repair jobs.</p>
               <div className="mt-4 flex flex-wrap gap-3 text-sm">
-                <span className="rounded-md border border-white/10 px-3 py-1.5 bg-white/5 text-white/90">My Jobs: {counts.total}</span>
-                <span className="rounded-md border border-white/10 px-3 py-1.5 bg-white/5 text-white/90">Pending: {counts.pending}</span>
-                <span className="rounded-md border border-white/10 px-3 py-1.5 bg-white/5 text-white/90">In Progress: {counts.in_progress}</span>
+                <span className="rounded-md border px-3 py-1.5 border-white/10 bg-white/5 text-white/90">My Jobs: {counts.total}</span>
+                <span className="rounded-md border px-3 py-1.5 border-white/10 bg-white/5 text-white/90">Pending: {counts.pending}</span>
+                <span className="rounded-md border px-3 py-1.5 border-white/10 bg-white/5 text-white/90">In Progress: {counts.in_progress}</span>
               </div>
             </div>
           </section>
@@ -327,10 +328,10 @@ const TechnicianDashboard: React.FC = () => {
           {/* Overview + Chart grid like admin */}
           <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Chart */}
-            <div className="rounded-2xl border border-white/10 auth-card backdrop-blur p-0 lg:col-span-2 overflow-hidden bg-[#12151d] text-white">
-              <div className="px-5 pt-4 pb-2 border-b border-white/10 bg-white/5 flex items-center justify-between">
+            <div className="rounded-2xl border dark:border-white/10 p-0 lg:col-span-2 overflow-hidden bg-[#12151d] text-white">
+              <div className="px-5 pt-4 pb-2 border-b dark:border-white/10 bg-white/5 flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-white">Dashboard Overview</h3>
-                <div className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 p-0.5">
+                <div className="inline-flex items-center gap-1 rounded-lg border dark:border-white/10 bg-white/5 p-0.5">
                   <button onClick={()=>setChartView('line')} className={`px-2.5 py-1 text-xs rounded-md ${chartView==='line'?'bg-white/20 text-white':'text-slate-300 hover:text-white'}`}>Line</button>
                   <button onClick={()=>setChartView('pie')} className={`px-2.5 py-1 text-xs rounded-md ${chartView==='pie'?'bg-white/20 text-white':'text-slate-300 hover:text-white'}`}>Pie</button>
                 </div>
@@ -339,14 +340,14 @@ const TechnicianDashboard: React.FC = () => {
                 {chartView === 'line' ? (
                   <>
                     <LineAreaChart data={seriesData} />
-                    <div className="mt-3 text-xs text-slate-300">
+                    <div className="mt-3 text-xs text-gray-600 dark:text-slate-300">
                       <span className="inline-flex items-center gap-1"><span className="h-1.5 w-3 rounded-full" style={{background:'#7C6FF1'}} /> Total Requests</span>
                     </div>
                   </>
                 ) : (
                   <>
                     <TechPieChart data={pieData} />
-                    <div className="mt-4 flex items-center gap-4 text-xs text-slate-300">
+                    <div className="mt-4 flex items-center gap-4 text-xs text-gray-600 dark:text-slate-300">
                       <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{background:'#F59E0B'}} /> Pending</span>
                       <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{background:'#7C6FF1'}} /> In Progress</span>
                       <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{background:'#A48AFB'}} /> Completed</span>
@@ -358,23 +359,23 @@ const TechnicianDashboard: React.FC = () => {
 
             {/* Right side metrics (5 cards) */}
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              <div className="rounded-xl border border-white/10 bg-[#12151d] p-4 shadow-sm min-w-0">
+              <div className="rounded-xl border dark:border-white/10 bg-[#12151d] p-4 shadow-sm min-w-0">
                 <p className="text-xs text-slate-300 flex items-center gap-2 overflow-hidden"><span className="text-emerald-300 shrink-0"><IconCheck /></span> <span className="truncate whitespace-nowrap" title="Completed">Completed</span></p>
                 <p className="text-3xl font-bold text-white">{counts.completed}</p>
               </div>
-              <div className="rounded-xl border border-white/10 bg-[#12151d] p-4 shadow-sm min-w-0">
+              <div className="rounded-xl border dark:border-white/10 bg-[#12151d] p-4 shadow-sm min-w-0">
                 <p className="text-xs text-slate-300 flex items-center gap-2 overflow-hidden"><span className="text-slate-300 shrink-0"><IconTruck /></span> <span className="truncate whitespace-nowrap" title="Delivered">Delivered</span></p>
                 <p className="text-3xl font-bold text-white">{counts.delivered}</p>
               </div>
-              <div className="rounded-xl border border-white/10 bg-[#12151d] p-4 shadow-sm min-w-0">
+              <div className="rounded-xl border dark:border-white/10 bg-[#12151d] p-4 shadow-sm min-w-0">
                 <p className="text-xs text-slate-300 flex items-center gap-2 overflow-hidden"><span className="text-amber-300 shrink-0"><IconClock /></span> <span className="truncate whitespace-nowrap" title="Pending">Pending</span></p>
                 <p className="text-3xl font-bold text-white">{counts.pending}</p>
               </div>
-              <div className="rounded-xl border border-white/10 bg-[#12151d] p-4 shadow-sm min-w-0">
+              <div className="rounded-xl border dark:border-white/10 bg-[#12151d] p-4 shadow-sm min-w-0">
                 <p className="text-xs text-slate-300 flex items-center gap-2 overflow-hidden"><span className="text-[#A48AFB] shrink-0"><IconProgress /></span> <span className="truncate whitespace-nowrap" title="In Progress">In Progress</span></p>
                 <p className="text-3xl font-bold text-white">{counts.in_progress}</p>
               </div>
-              <div className="rounded-xl border border-white/10 bg-[#12151d] p-4 shadow-sm md:col-span-2 lg:col-span-1 min-w-0">
+              <div className="rounded-xl border dark:border-white/10 bg-[#12151d] p-4 shadow-sm md:col-span-2 lg:col-span-1 min-w-0">
                 <p className="text-xs text-slate-300 flex items-center gap-2 overflow-hidden"><span className="text-slate-300 shrink-0"><IconGrid /></span> <span className="truncate whitespace-nowrap" title="Total">Total</span></p>
                 <p className="text-3xl font-bold text-white">{counts.total}</p>
               </div>
@@ -389,18 +390,18 @@ const TechnicianDashboard: React.FC = () => {
       ) : error ? (
         <div className="py-3 text-rose-400">{error}</div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-white/10 bg-[#12151d]">
+        <div className="overflow-x-auto rounded-xl border dark:border-white/10 bg-[#12151d]">
           {/* Quick tab buttons like before */}
-          <div className="flex items-center gap-2 p-3 border-b border-white/10">
+          <div className="flex items-center gap-2 p-3 border-b dark:border-white/10">
             {(['pending','in_progress','completed'] as const).map(t => (
               <button key={t} onClick={()=> hasTab ? setTabUrl(t) : setTab(t)}
-                className={`rounded-md px-3 py-1.5 text-sm ${hasTab && tab===t ? 'bg-white/10 border border-white/20 text-white' : 'border border-white/10 hover:bg-white/5 text-slate-200'}`}
+                className={`rounded-md px-3 py-1.5 text-sm ${hasTab && tab===t ? 'bg-white/10 text-white border border-white/20' : 'border border-white/10 text-slate-200 hover:bg-white/5'}`}
               >{t==='in_progress'?'In Progress':t.charAt(0).toUpperCase()+t.slice(1)}</button>
             ))}
           </div>
           <table className="min-w-full text-sm">
             <thead>
-              <tr className="text-left text-slate-300 border-b border-white/10">
+              <tr className="text-left text-slate-300 border-b dark:border-white/10">
                 <th className="py-2 px-3">Ticket</th>
                 <th className="py-2 px-3">Device</th>
                 <th className="py-2 px-3">Issue</th>
@@ -411,11 +412,11 @@ const TechnicianDashboard: React.FC = () => {
             </thead>
             <tbody>
               {(!hasTab ? filtered.slice(0,3) : filtered).map(r => (
-                <tr key={r.id} className="border-t border-white/10 hover:bg-white/5 align-top">
+                <tr key={r.id} className="border-t dark:border-white/10 hover:bg-white/5 align-top">
                   <td className="py-2 px-3 font-medium">{r.ticketNumber || r.id.slice(0,8)}</td>
                   <td className="py-2 px-3">{[r.brand, r.model].filter(Boolean).join(' ') || r.deviceType || '-'}</td>
                   <td className="py-2 px-3 max-w-[300px] truncate" title={r.issueDescription || ''}>{r.issueDescription || '-'}</td>
-                  <td className="py-2 px-3"><span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${statusBadge[r.status]||'bg-slate-100 text-slate-700'}`}>{r.status}</span></td>
+                  <td className="py-2 px-3"><span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${statusBadge[r.status]||'bg-slate-500/20 text-slate-300'}`}>{r.status}</span></td>
                   <td className="py-2 px-3">{fmtInr(r.estimatedCost)}</td>
                   
                   <td className="py-2 px-3">
@@ -429,7 +430,7 @@ const TechnicianDashboard: React.FC = () => {
                     {tab === 'in_progress' && (
                       <div className="flex items-center gap-2 whitespace-nowrap">
                         {/* Timer inline */}
-                        <div className="inline-flex items-center gap-2 rounded-md border border-white/10 px-2 py-1 bg-white/5 text-slate-200">
+                        <div className="inline-flex items-center gap-2 rounded-md border dark:border-white/10 px-2 py-1 bg-white/5 text-slate-200">
                           <span className="text-xs">Time:</span>
                           <code className="text-xs font-semibold text-white">{fmtHms(elapsed[r.id])}</code>
                           {activeLogs[r.id]?.status === 'running' ? (
@@ -478,7 +479,7 @@ const TechnicianDashboard: React.FC = () => {
             </tbody>
           </table>
           {!hasTab && filtered.length > 3 && (
-            <div className="flex justify-end p-3 border-t border-white/10">
+            <div className="flex justify-end p-3 border-t dark:border-white/10">
               <button onClick={()=>setTabUrl(tab)} className="btn">View all</button>
             </div>
           )}
@@ -538,7 +539,7 @@ const TechPieChart: React.FC<{ data: { label: string; value: number; color: stri
         ))}
       </g>
       {/* center text */}
-      <circle cx={cx} cy={cy} r={innerR} fill="#0b0d12" />
+      <circle cx={cx} cy={cy} r={innerR} className="fill-[#0b0d12]" />
       {focus ? (
         <>
           <text x={cx} y={cy - 6} textAnchor="middle" fontSize="12" fill="#cbd5e1">{focus.label}</text>
@@ -601,13 +602,10 @@ function LineAreaChart({ data }: { data: { label: string; value: number }[] }) {
           <stop offset="0%" stopColor="#A48AFB" stopOpacity="0.6" />
           <stop offset="100%" stopColor="#A48AFB" stopOpacity="0.08" />
         </linearGradient>
-        <filter id="soft-tech" x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur" />
-        </filter>
       </defs>
 
       <path d={areaD} fill={`url(#${gradId})`} />
-      <path id={pathId} d={pathD} fill="none" stroke="#7C6FF1" strokeWidth={3} style={{ filter: 'url(#soft-tech)' }}>
+      <path id={pathId} d={pathD} fill="none" stroke="#7C6FF1" strokeWidth={3}>
         <animate attributeName="stroke-dasharray" from="0,1000" to="1000,0" dur="1.1s" fill="freeze" />
       </path>
 

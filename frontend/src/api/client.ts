@@ -52,9 +52,20 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config
 })
 
-export type ApiError = {
-  message?: string
+export interface ApiError {
+  message: string
   errors?: Record<string, string[]>
+}
+
+// Simple in-memory toast dedupe: avoid spamming identical errors in a short window
+let lastToastKey = ''
+let lastToastAt = 0
+const shouldToast = (key: string, windowMs = 2500) => {
+  const now = Date.now()
+  if (key === lastToastKey && now - lastToastAt < windowMs) return false
+  lastToastKey = key
+  lastToastAt = now
+  return true
 }
 
 // Response interceptor: normalize errors and broadcast a global toast event
@@ -64,7 +75,11 @@ api.interceptors.response.use(
     // Network or CORS error without response
     const status = error?.response?.status
     const data = error?.response?.data || {}
-    const serverMsg = typeof data?.message === 'string' ? data.message : undefined
+    const serverMsg = typeof data?.error?.message === 'string'
+      ? data.error.message
+      : typeof data?.message === 'string'
+      ? data.message
+      : undefined
     const fallbackMsg = status === 401
       ? 'You are not authorized. Please login again.'
       : status === 403
@@ -77,14 +92,29 @@ api.interceptors.response.use(
 
     const normalized: ApiError = {
       message: serverMsg || fallbackMsg,
-      errors: (data && typeof data === 'object' && data.errors) ? data.errors : undefined,
+      errors: (data && typeof data === 'object' && (data.errors || data?.error?.errors)) ? (data.errors || data.error.errors) : undefined,
     }
 
     try {
+      const method = error?.config?.method?.toUpperCase?.() || 'GET'
+      const url = error?.config?.url || baseURL || ''
+      console.error('[api] Request failed', {
+        method,
+        url,
+        status,
+        message: normalized.message,
+        server: data,
+      })
+    } catch {}
+
+    try {
       // Emit a global toast event that the App can listen to
-      window.dispatchEvent(new CustomEvent('app:toast', {
-        detail: { kind: 'error', message: normalized.message },
-      }))
+      const toastKey = `${error?.config?.method||'get'}:${error?.config?.url||''}:${normalized.message}`
+      if (shouldToast(toastKey)) {
+        window.dispatchEvent(new CustomEvent('app:toast', {
+          detail: { kind: 'error', message: normalized.message },
+        }))
+      }
     } catch {}
 
     // Ensure consumers always receive a consistent shape in e.response.data

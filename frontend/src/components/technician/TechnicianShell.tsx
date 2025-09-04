@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { connectSocket, disconnectSocket } from '@/api/socket'
 
@@ -35,7 +35,7 @@ const IconDashboard = () => (
   </svg>
 )
 
-const TechnicianShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const TechnicianShell: React.FC = () => {
   const { user, logout } = useAuth()
   const location = useLocation()
   const isActive = (queryTab: string) => {
@@ -139,50 +139,17 @@ const TechnicianShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
           </Link>
           <div className="flex items-center gap-2">
             <div className="relative">
-              <button
-                ref={btnRef}
+              <Link
+                to="/technician/notifications"
+                ref={btnRef as any}
                 aria-label="Notifications"
                 className="relative rounded-md border border-white/10 bg-white/5 px-3 py-2"
-                onClick={() => setNotifOpen(v => !v)}
               >
                 🔔
                 {unreadCount > 0 && (
                   <span className="absolute -top-1 -right-1 inline-flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] h-5 min-w-[1.25rem] px-1">{unreadCount}</span>
                 )}
-              </button>
-              {notifOpen && (
-                <div ref={menuRef} className="absolute right-0 mt-2 w-80 max-w-[90vw] rounded-lg border border-white/10 bg-[#12151d] text-white shadow-xl z-40">
-                  <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
-                    <div className="font-medium text-sm">Notifications</div>
-                    <button className="text-xs rounded border border-white/10 px-2 py-1 hover:bg-white/5" onClick={markAllRead} disabled={unreadCount===0}>Mark all read</button>
-                  </div>
-                  <div className="max-h-80 overflow-y-auto scrollbar-none">
-                    {techNotifs.length === 0 ? (
-                      <div className="p-3 text-xs text-slate-300">No notifications</div>
-                    ) : (
-                      techNotifs.slice(0,20).map(n => (
-                        <div key={n.id} className="px-3 py-2 border-b border-white/5 text-sm flex items-center justify-between gap-2">
-                          <div className="min-w-0">
-                            <div className="truncate"><span className="font-medium">{n.title || 'Update'}</span> • {n.message}</div>
-                            <div className="text-[11px] text-slate-400 truncate">{new Date(n.createdAt).toLocaleString()}</div>
-                          </div>
-                          <div className="shrink-0 flex items-center gap-2">
-                            {(n.kind === 'new_repair' || n.kind === 'status_change') && (
-                              <Link to={`/technician`} onClick={() => setNotifOpen(false)} className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5 text-white">Open</Link>
-                            )}
-                            {!n.read && (
-                              <button className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5" onClick={() => markRead(n.id)}>Mark read</button>
-                            )}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                  <div className="px-3 py-2 border-t border-white/10 flex justify-end">
-                    <button className="text-xs rounded border border-white/10 px-2 py-1 hover:bg-white/5" onClick={() => { saveNotifs([]); setTechNotifs([]); }} disabled={techNotifs.length===0}>Clear all</button>
-                  </div>
-                </div>
-              )}
+              </Link>
             </div>
             <div className="relative">
               <button
@@ -243,50 +210,17 @@ const TechnicianShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
             </div>
             <div className="flex items-center gap-2">
               <div className="relative">
-                <button
-                  ref={btnRef}
+                <Link
+                  to="/technician/notifications"
+                  ref={btnRef as any}
                   aria-label="Notifications"
                   className="relative rounded-md border border-white/10 bg-white/5 px-3 py-1.5 hover:bg-white/10"
-                  onClick={() => setNotifOpen(v => !v)}
                 >
                   🔔
                   {unreadCount > 0 && (
                     <span className="absolute -top-1 -right-1 inline-flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] h-5 min-w-[1.25rem] px-1">{unreadCount}</span>
                   )}
-                </button>
-                {notifOpen && (
-                  <div ref={menuRef} className="absolute right-0 mt-2 w-80 max-w-[90vw] rounded-lg border border-white/10 bg-[#12151d] text-white shadow-xl z-40">
-                    <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
-                      <div className="font-medium text-sm">Notifications</div>
-                      <button className="text-xs rounded border border-white/10 px-2 py-1 hover:bg-white/5" onClick={markAllRead} disabled={unreadCount===0}>Mark all read</button>
-                    </div>
-                    <div className="max-h-80 overflow-y-auto scrollbar-none">
-                      {techNotifs.length === 0 ? (
-                        <div className="p-3 text-xs text-slate-300">No notifications</div>
-                      ) : (
-                        techNotifs.slice(0,20).map(n => (
-                          <div key={n.id} className="px-3 py-2 border-b border-white/5 text-sm flex items-center justify-between gap-2">
-                            <div className="min-w-0">
-                              <div className="truncate"><span className="font-medium">{n.title || 'Update'}</span> • {n.message}</div>
-                              <div className="text-[11px] text-slate-400 truncate">{new Date(n.createdAt).toLocaleString()}</div>
-                            </div>
-                            <div className="shrink-0 flex items-center gap-2">
-                              {(n.kind === 'new_repair' || n.kind === 'status_change') && (
-                                <Link to={`/technician`} className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5 text-white">Open</Link>
-                              )}
-                              {!n.read && (
-                                <button className="rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5" onClick={() => markRead(n.id)}>Mark read</button>
-                              )}
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                    <div className="px-3 py-2 border-t border-white/10 flex justify-end">
-                      <button className="text-xs rounded border border-white/10 px-2 py-1 hover:bg-white/5" onClick={() => { saveNotifs([]); setTechNotifs([]); }} disabled={techNotifs.length===0}>Clear all</button>
-                    </div>
-                  </div>
-                )}
+                </Link>
               </div>
               <div className="relative">
                 <button
@@ -308,7 +242,7 @@ const TechnicianShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
             </div>
           </div>
           <div className="rounded-2xl border border-white/10 auth-card backdrop-blur p-4 shadow-sm text-white">
-            {children}
+            <Outlet />
           </div>
         </main>
       </div>
