@@ -1,7 +1,7 @@
 import { Request, Response } from 'express'
 import { ApprovalRequest, Customer, RepairOrder, User } from '../models'
 import { ApprovalStatus, ApprovalType } from '../models/ApprovalRequest'
-import { notify } from '../services/notifications.service'
+import { notifySmart } from '../services/notifications.service'
 import { signApprovalToken, verifyApprovalToken } from '../utils/approvalToken'
 
 function getNowPlus(days: number) {
@@ -50,7 +50,7 @@ export const createApprovalRequest = async (req: Request, res: Response) => {
     // Notify customer (in-app + email/SMS) via their user account
     const custUser = await User.findByPk(customer.userId)
     if (custUser) {
-      await notify({
+      await notifySmart({
         userId: custUser.id,
         event: 'approval:created',
         data: { approvalId: approval.id, repairOrderId: ro.id, type: approval.type, title: approval.title, amountDelta: approval.amountDelta },
@@ -103,7 +103,7 @@ export const actOnApproval = async (req: Request, res: Response) => {
     const customer = await Customer.findByPk(approval.customerId)
     const custUser = customer ? await User.findByPk(customer.userId) : null
     if (custUser) {
-      await notify({ userId: custUser.id, event: 'approval:updated', data: { id: approval.id, status: approval.status, repairOrderId: approval.repairOrderId }, channels: ['in_app', 'email', 'sms'] })
+      await notifySmart({ userId: custUser.id, event: 'approval:updated', data: { id: approval.id, status: approval.status, repairOrderId: approval.repairOrderId }, channels: ['in_app', 'email', 'sms'] })
     }
 
     res.json(approval)
@@ -132,7 +132,7 @@ export const publicActOnApproval = async (req: Request, res: Response) => {
     const customer = await Customer.findByPk(approval.customerId)
     const custUser = customer ? await User.findByPk(customer.userId) : null
     if (custUser) {
-      await notify({ userId: custUser.id, event: 'approval:updated', data: { id: approval.id, status: approval.status, repairOrderId: approval.repairOrderId }, channels: ['in_app', 'email', 'sms'] })
+      await notifySmart({ userId: custUser.id, event: 'approval:updated', data: { id: approval.id, status: approval.status, repairOrderId: approval.repairOrderId }, channels: ['in_app', 'email', 'sms'] })
     }
 
     res.json({ ok: true, id: approval.id, status: approval.status })

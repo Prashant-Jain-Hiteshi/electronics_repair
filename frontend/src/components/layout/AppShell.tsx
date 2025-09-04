@@ -1,8 +1,10 @@
-import React, { ReactNode, useState, useEffect } from 'react';
+import React, { ReactNode, useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useSocket } from '@/context/SocketContext';
 import { useNotifications } from '@/hooks/useNotifications';
+import SkipLink from '@/components/a11y/SkipLink';
+import { LiveRegion } from '@/components/a11y/LiveRegion';
 
 // (Theme toggle icons removed; app locked to dark)
 
@@ -39,8 +41,11 @@ const AppShell: React.FC<AppShellProps> = ({ children }) => {
 
   return (
     <div className="min-h-screen bg-[#0b0d12] text-white flex flex-col">
+      <SkipLink />
+      {/* Live region to announce route changes */}
+      <LiveRegion politeness="polite" />
       {/* Header */}
-      <header className="bg-[#12151d] shadow-sm border-b border-white/10">
+      <header className="bg-[#12151d] shadow-sm border-b border-white/10" role="banner">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             <div className="flex items-center">
@@ -131,7 +136,7 @@ const AppShell: React.FC<AppShellProps> = ({ children }) => {
       <div className="flex-1 flex overflow-hidden items-stretch">
         {/* Sidebar */}
         {user && (
-          <nav className="hidden md:flex bg-[#12151d] w-64 flex-col border-r border-white/10 flex-none relative z-20">
+          <nav className="hidden md:flex bg-[#12151d] w-64 flex-col border-r border-white/10 flex-none relative z-20" aria-label="Primary">
             <div className="flex-1 flex flex-col pt-5 pb-4 overflow-y-auto">
               <div className="flex-1 px-3 space-y-1">
                 {navItems.map((item) => (
@@ -156,11 +161,11 @@ const AppShell: React.FC<AppShellProps> = ({ children }) => {
 
         {/* Page content */}
         <div className="flex-1 flex flex-col overflow-hidden bg-[#0f1218] min-w-0 relative z-10">
-          <main className="flex-1 overflow-y-auto focus:outline-none py-6 text-white">
+          <MainContent>
             <div className="container mx-auto px-4 sm:px-6 md:px-8">
               {children}
             </div>
-          </main>
+          </MainContent>
         </div>
       </div>
     </div>
@@ -168,3 +173,31 @@ const AppShell: React.FC<AppShellProps> = ({ children }) => {
 };
 
 export default AppShell;
+
+// Internal component to manage focus and landmark roles for main content
+const MainContent: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const ref = useRef<HTMLElement>(null)
+  const location = useLocation()
+
+  useEffect(() => {
+    // Move focus to main on route changes
+    ref.current?.focus({ preventScroll: true })
+    // Announce the route change for screen readers
+    const title = document.title || 'Page updated'
+    const ev = new CustomEvent('app:announce', { detail: title })
+    // Bridge to LiveRegion via a small listener in App.tsx (optional) or use LiveRegion directly
+    window.dispatchEvent(ev)
+  }, [location.pathname])
+
+  return (
+    <main
+      id="main-content"
+      ref={ref}
+      role="main"
+      tabIndex={-1}
+      className="flex-1 overflow-y-auto focus:outline-none py-6 text-white"
+    >
+      {children}
+    </main>
+  )
+}

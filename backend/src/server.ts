@@ -7,22 +7,47 @@ import { DataTypes } from 'sequelize';
 import { PaymentKind, PaymentProvider } from './models/Payment';
 import './models'; // initialize models and associations
 import { createServer } from 'http';
+import net from 'net';
 import { initSocket, emitToRole } from './socket';
 import { runAnalyticsRollups } from './jobs/analytics';
 import { runSlaChecks } from './jobs/sla';
 import { ApprovalRequest, Customer, User, Feedback } from './models';
 import { ApprovalStatus } from './models/ApprovalRequest';
 import { notify } from './services/notifications.service';
+import { startWorkers } from './queue';
+import { redisPing } from './config/redis';
 // Reverted: Time Tracking & Bench Utilization background jobs
 // import { startBackgroundJobs } from './jobs/scheduler';
 
 const PORT = parseInt(process.env.PORT || '5000', 10);
+
+async function findAvailablePort(startPort: number, maxTries = 10): Promise<number> {
+  let port = startPort;
+  for (let i = 0; i <= maxTries; i++) {
+    const free = await new Promise<boolean>((resolve) => {
+      const tester = net
+        .createServer()
+        .once('error', () => resolve(false))
+        .once('listening', () => {
+          tester.close(() => resolve(true));
+        })
+        .listen(port);
+    });
+    if (free) return port;
+    port += 1;
+  }
+  throw Object.assign(new Error(`No available port found starting at ${startPort}`), { code: 'EADDRINUSE' });
+}
 
 async function start() {
   try {
     // Test DB connection
     await sequelize.authenticate();
     console.log('Database connection has been established successfully.');
+
+    // Test Redis connection (non-fatal)
+    const redisOk = await redisPing();
+    console.log(`[redis] ping: ${redisOk ? 'ok' : 'failed (continuing without redis)'}`);
 
     // Ensure required columns exist before syncing indexes (hotfix for environments where alter=false)
     try {
@@ -83,8 +108,14 @@ async function start() {
     await sequelize.sync({ alter });
     console.log(`All models were synchronized successfully. (alter=${alter})`);
 
+    // Choose a free port to avoid EADDRINUSE (try base PORT then increment)
+    const chosenPort = await findAvailablePort(PORT, 20);
+
     const server = createServer(app);
     initSocket(server);
+
+    // Start background workers (BullMQ)
+    try { await startWorkers(); } catch (e) { try { console.warn('[queue] failed to start workers', (e as any)?.message || e); } catch {} }
 
     // Lightweight scheduled job: expire approvals past tokenExpiresAt
     const jobs: NodeJS.Timeout[] = [];
@@ -170,11 +201,11 @@ async function start() {
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);
 
-    server.listen(PORT, () => {
+    server.listen(chosenPort, () => {
       const corsOrigin = process.env.CORS_ORIGIN || '*';
-      console.log(`Server is running on http://localhost:${PORT}`);
-      console.log(`Health:            http://localhost:${PORT}/health`);
-      console.log(`API base (mount):  http://localhost:${PORT}/api`);
+      console.log(`Server is running on http://localhost:${chosenPort}`);
+      console.log(`Health:            http://localhost:${chosenPort}/health`);
+      console.log(`API base (mount):  http://localhost:${chosenPort}/api`);
       console.log(`CORS origin:       ${corsOrigin}`);
     });
   } catch (error) {

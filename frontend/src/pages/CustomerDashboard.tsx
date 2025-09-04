@@ -13,6 +13,8 @@ import {
   CubeIcon
 } from '@heroicons/react/24/outline';
 import { format } from 'date-fns';
+import { Skeleton, SkeletonText, TableSkeleton } from '@/components/ui/Skeleton';
+import VisuallyHidden from '@/components/a11y/VisuallyHidden';
 import { useAuth } from '../hooks/use-auth';
 import { useRepairs } from '../hooks/use-repairs';
 import { RepairOrder, RepairStatus, RepairPriority, DeviceInfo } from '../types/repair';
@@ -368,17 +370,53 @@ const CustomerDashboard: React.FC = () => {
   // Loading and error states
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <header className="bg-white dark:bg-gray-800 shadow-sm">
+          <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Customer Dashboard</h1>
+            <div className="relative">
+              <Skeleton className="h-9 w-64" />
+            </div>
+          </div>
+        </header>
+        <main className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
+          <div className="rounded-xl p-6 mb-8 bg-white border border-gray-200 text-gray-900 dark:bg-gray-800 dark:border-gray-700 dark:text-white">
+            <SkeletonText lines={2} />
+            <div className="mt-4 flex gap-3">
+              <Skeleton className="h-9 w-36" />
+              <Skeleton className="h-9 w-44" />
+            </div>
+          </div>
+          <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg p-5">
+                <div className="flex items-center gap-4">
+                  <Skeleton className="h-10 w-10 rounded-md" />
+                  <div className="flex-1">
+                    <Skeleton className="h-4 w-24" />
+                    <div className="mt-2"><Skeleton className="h-6 w-12" /></div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-8">
+            <div className="flex items-center justify-between mb-4">
+              <Skeleton className="h-6 w-36" />
+              <Skeleton className="h-5 w-20" />
+            </div>
+            <TableSkeleton rows={5} cols={6} />
+          </div>
+        </main>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" role="alert" aria-live="assertive">
         <div className="text-center">
-          <p className="text-red-500 text-lg">Error loading repairs: {error.message}</p>
+          <p className="text-red-500 dark:text-red-400 text-lg">Error loading repairs: {error.message}</p>
         </div>
       </div>
     );
@@ -391,12 +429,15 @@ const CustomerDashboard: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Customer Dashboard</h1>
           <div className="flex items-center space-x-4">
             <div className="relative">
+              <label htmlFor="search-repairs" className="sr-only">Search repairs</label>
               <input
                 type="text"
                 placeholder="Search repairs..."
                 className="w-64 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                id="search-repairs"
+                aria-label="Search repairs"
               />
             </div>
           </div>

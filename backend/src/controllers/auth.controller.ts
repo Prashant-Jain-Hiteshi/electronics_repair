@@ -52,6 +52,12 @@ export async function requestOtp(req: Request, res: Response) {
       console.warn('Twilio send error (non-fatal):', e);
     }
 
+    // For development visibility, also expose OTP in a response header and log it (non-production only)
+    if ((process.env.NODE_ENV || 'development') !== 'production') {
+      try { res.setHeader('X-Debug-OTP', code); } catch {}
+      try { console.log(`[auth] OTP for ${mobile}: ${code}`); } catch {}
+    }
+
     return res.status(200).json({ message: 'OTP sent to mobile', exists: !!user, otp: code });
   } catch (err: any) {
     console.error('Request OTP error:', err);

@@ -5,12 +5,14 @@ interface LogoProps extends React.HTMLAttributes<HTMLDivElement> {
   variant?: 'default' | 'icon' | 'full';
   size?: 'sm' | 'md' | 'lg';
   className?: string;
+  showIcon?: boolean;
 }
 
 export const Logo: React.FC<LogoProps> = ({
   variant = 'default',
   size = 'md',
   className = '',
+  showIcon = true,
   ...props
 }) => {
   const sizeClasses = {
@@ -55,10 +57,11 @@ export const Logo: React.FC<LogoProps> = ({
 
   return (
     <div className={cn('flex items-center', className)} {...props}>
-      {icon}
+      {showIcon && icon}
       <span
         className={cn(
-          'ml-2 font-bold text-gray-900',
+          'font-bold text-gray-900',
+          showIcon ? 'ml-2' : '',
           textSizes[size],
           variant === 'full' ? 'block' : 'hidden sm:block'
         )}

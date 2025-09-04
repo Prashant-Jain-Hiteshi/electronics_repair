@@ -15,6 +15,8 @@ export const api = axios.create({
     // Prevent caching to avoid 304 Not Modified with empty bodies
     'Cache-Control': 'no-store',
   },
+  // Always include credentials so cookies (e.g., CSRF secret) are sent
+  withCredentials: true,
 })
 
 // Attach token from localStorage if present
@@ -51,6 +53,41 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   }
   return config
 })
+
+// Attach CSRF token for write requests
+api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
+  const method = (config.method || 'get').toUpperCase()
+  const isWrite = !['GET', 'HEAD', 'OPTIONS'].includes(method)
+  if (!isWrite) return config
+  const token = await ensureCsrfToken()
+  if (token && token !== 'DISABLED') {
+    if (typeof config.headers?.set === 'function') config.headers.set('X-CSRF-Token', token)
+    else (config.headers as any) = { ...(config.headers || {}), 'X-CSRF-Token': token }
+  }
+  return config
+})
+
+// Lazy CSRF token cache (populated on first write request)
+let __csrfToken: string | null = null
+async function ensureCsrfToken() {
+  if (__csrfToken) return __csrfToken
+  try {
+    const resp = await fetch(`${baseURL?.replace(/\/$/, '') || ''}/csrf-token`, { credentials: 'include' })
+    if (resp.status === 204) {
+      // CSRF disabled on server; nothing to attach
+      __csrfToken = 'DISABLED'
+      return __csrfToken
+    }
+    if (!resp.ok) throw new Error('Failed to fetch CSRF token')
+    const data = await resp.json().catch(() => ({}))
+    __csrfToken = (data && data.token) || null
+    return __csrfToken
+  } catch {
+    // Fail open in dev if server disabled or unreachable; server will decide
+    __csrfToken = 'DISABLED'
+    return __csrfToken
+  }
+}
 
 export interface ApiError {
   message: string

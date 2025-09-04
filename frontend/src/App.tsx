@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { ToastContainer, toast } from 'react-toastify';
@@ -11,6 +11,7 @@ import NotificationsBridge from '@/components/notifications/NotificationsBridge'
 import { AppRoutes } from '@/routes';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
+import { LiveRegion } from '@/components/a11y/LiveRegion';
 // Create a client for React Query
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -23,6 +24,7 @@ const queryClient = new QueryClient({
 });
 
 function App() {
+  const [announcement, setAnnouncement] = useState('')
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent)?.detail as { kind?: 'error'|'success'|'info'|'warning'; message?: string } | undefined
@@ -37,6 +39,15 @@ function App() {
     return () => window.removeEventListener('app:toast', handler as EventListener)
   }, [])
 
+  useEffect(() => {
+    const onAnnounce = (e: Event) => {
+      const msg = (e as CustomEvent)?.detail as string | undefined
+      if (typeof msg === 'string') setAnnouncement(msg)
+    }
+    window.addEventListener('app:announce', onAnnounce as EventListener)
+    return () => window.removeEventListener('app:announce', onAnnounce as EventListener)
+  }, [])
+
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
@@ -46,6 +57,8 @@ function App() {
               <AppShell>
                 <AppRoutes />
               </AppShell>
+              {/* SR-only live region for route and important announcements */}
+              <LiveRegion politeness="polite">{announcement}</LiveRegion>
               <NotificationsBridge />
               <ToastContainer
                 position="top-right"

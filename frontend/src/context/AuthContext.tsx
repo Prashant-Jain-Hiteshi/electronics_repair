@@ -29,6 +29,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const init = async () => {
+      // Prefetch CSRF token if the backend has CSRF enabled; backend returns 204 if disabled
+      try { await api.get('/csrf-token', { withCredentials: true }) } catch {}
       if (token) {
         try {
           await fetchMe()
